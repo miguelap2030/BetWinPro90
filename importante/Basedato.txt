@@ -1,0 +1,458 @@
+Para un sistema de inversión en criptomonedas con MLM y apuestas deportivas en Supabase (PostgreSQL), las tablas principales deberían cubrir usuarios, jerarquía de referidos, depósitos, ganancias diarias, comisiones, retiros y eventos. Aquí tienes el esquema básico:
+
+1. profiles (extiende auth.users)
+
+Guarda información adicional de cada usuario.
+
+· id (uuid, PK, references auth.users)
+· username (text, único) es el correo sin el @gmail.com
+· sponsor_id (uuid, references profiles, permite nulo) → quien lo invitó
+•sponsor_username (seris el username del sponsor) quien lo invito
+· created_at (timestamp)
+· updated_at (timestamp)
+
+- tabla referral 
+
+Campo Tipo Descripción
+id uuid (PK) Identificador único de la relación.
+sponsor_id uuid (FK → profiles.id) El usuario que patrocina.lv 1 duperior
+
+sponsor_id uuid (FK → profiles.id) El usuario que patrocina a du patrocinador lv2 superior.
+
+sponsor_id uuid (FK → profiles.id) El usuario que patrocina al patrocinador de su patrocinador lv3 superior (esta seccion acelera el reparto de comisiones cusndo deposito es completado 
+
+created_at timestamptz Fecha en que se creó la relación.
+
+2. wallets
+
+Saldo actual de cada usuario (una sola fila por usuario).
+
+· id (uuid, PK)
+· user_id (uuid, references profiles, único)
+wallet text , seeria la wallet q asoxia el usuario para dururoa retiros 
+· balance_disponible (numeric, default 0) → saldo disponible
+· balance invertido (numeric default 0) seria el balance q tiene invertido
+· currency (text, default 'USD') → podrías soportar criptos
+· updated_at (timestamp)
+
+3. deposits
+
+Registro de inversiones/depósitos realizados.
+
+· id (uuid, PK)
+· user_id (uuid, references profiles)
+· amount (numeric)
+· currency (text)
+· status (text: 'pending', 'completed', 'cancelled')
+· transaction_id (text, opcional) → ID de pago externo
+· completed_at (timestamp, opcional)
+· created_at (timestamp)
+
+4. daily_earnings
+
+Ganancias diarias del 3% generadas para cada usuario (se inserta un registro por usuario y día).
+
+· id (uuid, PK)
+· user_id (uuid, references profiles)
+· date (date)
+· amount (numeric) → ganancia bruta del día
+· profit_rate (numeric, default 3.0) → porcentaje aplicado
+· source (text) → puede ser 'deposit' o 'general'
+· created_at (timestamp)
+
+5. mlm_commissions
+
+Comisiones pagadas por el sistema MLM (tanto por depósitos directos como residuales).
+
+· id (uuid, PK)
+· user_id (uuid, references profiles) → quien recibe la comisión
+· from_user_id (uuid, references profiles) → usuario que generó la comisión (ej. depositante)
+· level (int) → 1, 2 o 3
+· type (text: 'deposit' o 'residual')
+· amount (numeric)
+· related_deposit_id (uuid, references deposits, opcional)
+· related_earning_id (uuid, references daily_earnings, opcional)
+· created_at (timestamp)
+
+6. withdrawals
+
+Solicitudes de retiro.
+
+· id (uuid, PK)
+· user_id (uuid, references profiles)
+· amount (numeric)
+· currency (text)
+· wallet_address (text)
+· status (text: 'pending', 'approved', 'rejected', 'completed')
+· requested_at (timestamp)
+· processed_at (timestamp, opcional)
+
+7. tranfer internas 
+seria las tranferencias del saldo disponible hacia saldo de inversion y de saldo de inversion hacia saldo invertido 
+
+· uuid 
+user id ,uid reference profiles
+amount , numeric
+. tipo text : tranfer on , tranfer out
+
+8. transactions
+
+Libro mayor para auditoría (cada movimiento de dinero).
+
+· id (uuid, PK)
+· user_id (uuid, references profiles)
+· type (text: 'deposit', 'withdrawal', 'profit', 'commission' tranfer on ,tranfer out)
+· amount (numeric)
+· reference_id (uuid) → ID de la tabla origen (deposits, daily_earnings, etc.)
+· created_at (timestamp)
+
+
+Relaciones clave:
+
+· Un usuario puede tener un sponsor_id que apunta a otro perfil (árbol MLM).
+· Los depósitos generan comisiones (mlm_commissions.type='deposit') para los sponsors en niveles 1, 2 y 3.
+· Las ganancias diarias (daily_earnings) generan comisiones residuales (mlm_commissions.type='residual') para los sponsors.
+· Cada movimiento se refleja en transactions para mantener consistencia y facilitar auditorías.
+
+Consideraciones en Supabase:
+
+· Usa RLS (Row Level Security) para proteger las tablas.
+· Aprovecha las funciones y vistas para calcular el árbol MLM o saldos.
+· Los códigos de referido se generan por el username
+triguer , cada ves q se detecta deposit completed distribulle comiciones 
+
+CONCIDERACIONES PARA TABLA DE REFERIDOS 
+Para tu sistema MLM de 3 niveles en Supabase (PostgreSQL), la forma más fácil, efectiva y con mejor rendimiento es usar Consultas Recursivas (CTE - Common Table Expressions) . Esta es la herramienta nativa de PostgreSQL para manejar estructuras jerárbicas como árboles de referidos.
+
+Aquí tienes las soluciones prácticas para ambos casos (ver hacia abajo y hacia arriba), listas para implementar.
+
+---
+
+📊 Solución 1: Ver la red HACIA ABAJO (Mis referidos en niveles 1,2,3)
+
+Esta consulta te devuelve todos los usuarios que están debajo de un referidor específico, limitado a 3 niveles de profundidad.
+
+```sql
+-- Función para obtener los referidos hacia abajo de un usuario
+CREATE OR REPLACE FUNCTION get_downline_referrals(p_user_id UUID, max_level INT DEFAULT 3)
+RETURNS TABLE (
+    referral_id UUID,
+    username TEXT,
+    level INT,
+    path TEXT[]
+) LANGUAGE plpgsql AS $$
+BEGIN
+    RETURN QUERY
+    WITH RECURSIVE referral_tree AS (
+        -- Nivel 1: Referidos directos
+        SELECT 
+            id,
+            username,
+            1 as level,
+            ARRAY[id] as path
+        FROM profiles
+        WHERE sponsor_id = p_user_id
+
+        UNION ALL
+
+        -- Niveles siguientes (recursivo)
+        SELECT 
+            p.id,
+            p.username,
+            rt.level + 1,
+            rt.path || p.id
+        FROM profiles p
+        INNER JOIN referral_tree rt ON p.sponsor_id = rt.referral_id
+        WHERE rt.level < max_level  -- Controla profundidad máxima
+    )
+    SELECT 
+        referral_id,
+        username,
+        level,
+        path
+    FROM referral_tree
+    ORDER BY level, username;
+END;
+$$;
+
+-- Uso: obtener referidos del usuario con ID 'xxx' (3 niveles)
+SELECT * FROM get_downline_referrals('usuario-id-aqui', 3);
+```
+
+¿Qué devuelve? 
+
+· referral_id: ID del referido
+· username: nombre del usuario
+· level: nivel exacto (1,2,3)
+· path: ruta completa (ej. {A,B,C} para mostrar jerarquía)
+
+---
+
+⬆️ Solución 2: Ver la red HACIA ARRIBA (Sponsors para comisiones)
+
+Esta consulta te devuelve los patrocinadores (upline) de un usuario hasta 3 niveles arriba, ideal para calcular comisiones cuando alguien deposita o gana.
+
+```sql
+-- Función para obtener los sponsors hacia arriba de un usuario
+CREATE OR REPLACE FUNCTION get_upline_sponsors(p_user_id UUID, max_level INT DEFAULT 3)
+RETURNS TABLE (
+    sponsor_id UUID,
+    username TEXT,
+    level INT  -- 1 = sponsor directo, 2 = sponsor del sponsor, etc.
+) LANGUAGE plpgsql AS $$
+BEGIN
+    RETURN QUERY
+    WITH RECURSIVE upline_tree AS (
+        -- Caso base: buscar sponsor directo
+        SELECT 
+            id as sponsor_id,
+            username,
+            1 as level
+        FROM profiles
+        WHERE id = (SELECT sponsor_id FROM profiles WHERE id = p_user_id)
+        AND sponsor_id IS NOT NULL
+
+        UNION ALL
+
+        -- Niveles superiores
+        SELECT 
+            p.id,
+            p.username,
+            ut.level + 1
+        FROM profiles p
+        INNER JOIN upline_tree ut ON p.id = (SELECT sponsor_id FROM profiles WHERE id = ut.sponsor_id)
+        WHERE ut.level < max_level
+    )
+    SELECT 
+        sponsor_id,
+        username,
+        level
+    FROM upline_tree
+    ORDER BY level;
+END;
+$$;
+
+-- Uso: obtener sponsors del usuario 'xxx' (3 niveles arriba)
+SELECT * FROM get_upline_sponsors('usuario-id-aqui', 3);
+```
+
+¿Qué devuelve?
+
+· sponsor_id: ID del patrocinador
+· username: nombre
+· level: 1=directo, 2=indirecto, 3=tercer nivel 
+
+---
+
+⚡ Optimizaciones Clave para Supabase
+
+Para que estas consultas sean rápidas incluso con miles de usuarios, crea estos índices:
+
+```sql
+-- Índice esencial para búsquedas de referidos
+CREATE INDEX idx_profiles_sponsor_id ON profiles(sponsor_id);
+
+-- Índice compuesto para consultas frecuentes
+CREATE INDEX idx_profiles_id_sponsor ON profiles(id, sponsor_id);
+
+-- Considera una vista materializada si consultas muy seguido (actualiza diariamente)
+CREATE MATERIALIZED VIEW mv_referral_network AS
+WITH RECURSIVE referral_tree AS (
+    -- misma lógica que arriba pero precalculada
+)
+SELECT * FROM referral_tree;
+```
+
+Recomendación: Usa las funciones directamente para datos en tiempo real. Si notas lentitud con muchos usuarios, programa un cron job que actualice una vista materializada cada hora .
+
+---
+
+🎯 Resumen: Cuál usar y cuándo
+
+Necesidad Solución Frecuencia de uso
+Ver red de referidos (frontend) get_downline_referrals() Baja (cuando el usuario consulta)
+Calcular comisiones por depósito get_upline_sponsors() Alta (cada depósito/ganancia)
+Reportes administrativos Vista materializada Programada (cron)
+
+¿Por qué CTE recursivas? Porque PostgreSQL las ejecuta de forma optimizada, evitando múltiples consultas a la base de datos y permitiendo control exacto de profundidad . Es la misma tecnología que usan empresas como Instagram o Spotify para manejar grafos sociales.
+
+¿Necesitas que adapte estas funciones para calcular automáticamente las comisiones del 5%, 3% y 1% que definiste?
+
+Para optimizar la velocidad y fluidez de tu sistema MLM de 3 niveles en Supabase, es fundamental diseñar bien las tablas y sus relaciones. La idea de una tabla específica de referidos (también llamada tabla de adyacencia o de enlaces) es excelente para acelerar consultas jerárquicas, especialmente cuando la red crece. Aquí te explico cómo hacerlo y qué considerar en todas las tablas.
+
+---
+
+📁 Tabla referrals (o referral_links)
+
+Esta tabla almacena explícitamente cada relación patrocinador-referido, lo que permite consultar la red sin recursión en tiempo real.
+
+Campos recomendados:
+
+Campo Tipo Descripción
+id uuid (PK) Identificador único de la relación.
+sponsor_id uuid (FK → profiles.id) El usuario que patrocina.
+referred_id uuid (FK → profiles.id) El usuario referido.
+level smallint Nivel de profundidad (1, 2, 3…). Opcional, pero acelera consultas de nivel fijo.
+created_at timestamptz Fecha en que se creó la relación.
+
+Índices clave:
+
+```sql
+-- Para búsquedas rápidas descendentes (patrocinador → sus referidos)
+CREATE INDEX idx_referrals_sponsor ON referrals(sponsor_id);
+
+-- Para búsquedas ascendentes (referido → su patrocinador directo)
+CREATE INDEX idx_referrals_referred ON referrals(referred_id);
+
+-- Índice compuesto si necesitas filtrar por nivel
+CREATE INDEX idx_referrals_sponsor_level ON referrals(sponsor_id, level);
+
+-- Garantizar que no haya duplicados (un usuario solo puede ser referido una vez)
+CREATE UNIQUE INDEX idx_referrals_unique_referred ON referrals(referred_id);
+```
+
+Mantenimiento automático con triggers:
+
+Para no depender de que la aplicación inserte correctamente en esta tabla, puedes crear un trigger que, cada vez que se inserte un nuevo perfil con sponsor_id, genere automáticamente todas las relaciones hacia arriba (niveles 1, 2, 3).
+
+```sql
+-- Función que se ejecuta al insertar un perfil
+CREATE OR REPLACE FUNCTION maintain_referral_tree()
+RETURNS TRIGGER AS $$
+DECLARE
+    current_sponsor_id uuid;
+    current_level int;
+BEGIN
+    -- Insertar la relación directa (nivel 1)
+    IF NEW.sponsor_id IS NOT NULL THEN
+        INSERT INTO referrals (sponsor_id, referred_id, level)
+        VALUES (NEW.sponsor_id, NEW.id, 1);
+
+        -- Ahora subimos al sponsor del sponsor (nivel 2)
+        current_sponsor_id := NEW.sponsor_id;
+        current_level := 2;
+
+        WHILE current_level <= 3 AND current_sponsor_id IS NOT NULL LOOP
+            -- Buscar el sponsor del sponsor actual
+            SELECT sponsor_id INTO current_sponsor_id
+            FROM profiles
+            WHERE id = current_sponsor_id;
+
+            IF current_sponsor_id IS NOT NULL THEN
+                INSERT INTO referrals (sponsor_id, referred_id, level)
+                VALUES (current_sponsor_id, NEW.id, current_level);
+            END IF;
+
+            current_level := current_level + 1;
+        END LOOP;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger después de insertar en profiles
+CREATE TRIGGER trg_after_insert_profile
+AFTER INSERT ON profiles
+FOR EACH ROW
+EXECUTE FUNCTION maintain_referral_tree();
+```
+
+Con esta tabla, consultar los referidos de nivel 1, 2 o 3 de un usuario se vuelve instantáneo:
+
+```sql
+-- Obtener todos los referidos de nivel 1 de un usuario
+SELECT referred_id FROM referrals WHERE sponsor_id = 'usuario-id' AND level = 1;
+
+-- Obtener todos los referidos de nivel 2 y 3 (para comisiones residuales)
+SELECT referred_id FROM referrals WHERE sponsor_id = 'usuario-id' AND level IN (2,3);
+```
+
+---
+
+⚡ Optimizaciones generales para todas las tablas
+
+1. Índices estratégicos
+
+Crea índices en:
+
+· Todas las foreign keys (ej. user_id en wallets, deposits, etc.).
+· Columnas usadas en búsquedas frecuentes (status, date, level).
+· Columnas usadas en ordenamientos (created_at descendente).
+
+Ejemplos:
+
+```sql
+-- profiles
+CREATE INDEX idx_profiles_sponsor ON profiles(sponsor_id);
+CREATE INDEX idx_profiles_referral_code ON profiles(referral_code);
+
+-- deposits
+CREATE INDEX idx_deposits_user_status ON deposits(user_id, status);
+CREATE INDEX idx_deposits_created_at ON deposits(created_at DESC);
+
+-- daily_earnings
+CREATE INDEX idx_daily_earnings_user_date ON daily_earnings(user_id, date);
+```
+
+2. Tipos de datos adecuados
+
+· Usa numeric para dinero (evita float por errores de redondeo).
+· Usa timestamptz para fechas (maneja zonas horarias automáticamente).
+· Para textos cortos y fijos, varchar(n); para largos, text.
+· Las claves primarias: uuid es seguro y distribuible; si la tabla es enorme, considera bigserial (entero autoincremental) para ahorrar espacio.
+
+3. Evita NULL en lo posible
+
+· Los campos que puedan ser nulos (como sponsor_id en el primer usuario) deben permitirlo, pero en búsquedas, los índices no incluyen NULLs a menos que uses índices parciales. Si necesitas buscar NULL, crea un índice parcial:
+    CREATE INDEX idx_profiles_sponsor_null ON profiles(id) WHERE sponsor_id IS NULL;
+
+4. Normalización vs Desnormalización
+
+· La tabla referrals es una desnormalización controlada que mejora el rendimiento de lecturas a costa de mantenerla con triggers.
+· Puedes aplicar desnormalización similar en otras áreas, por ejemplo, almacenar el saldo total en profiles (en lugar de calcularlo siempre desde wallets), pero actualízalo con triggers.
+
+5. Particionamiento para tablas grandes
+
+· Tablas como transactions, daily_earnings o deposits pueden crecer rápidamente. En Supabase (PostgreSQL 12+) puedes particionar por rango de fechas.
+· Ejemplo para daily_earnings:
+  ```sql
+  CREATE TABLE daily_earnings (
+      id uuid,
+      user_id uuid,
+      date date,
+      amount numeric,
+      PRIMARY KEY (id, date)
+  ) PARTITION BY RANGE (date);
+  ```
+  Luego creas particiones mensuales. Las consultas con filtro por fecha accederán solo a la partición relevante.
+
+6. Uso de vistas materializadas
+
+· Si hay reportes que se consultan con frecuencia pero no necesitan datos en tiempo real (ej. ranking de ganadores), crea vistas materializadas y actualízalas con un cron job diario.
+· Ejemplo: vista de referidos con nivel precalculado (similar a la tabla referrals pero quizás más completa).
+
+7. Configuración de RLS (Row Level Security)
+
+· En Supabase, cada tabla debe tener políticas RLS. Asegúrate de que las políticas usen índices. Por ejemplo, una política como USING (user_id = auth.uid()) se beneficia del índice en user_id.
+
+8. Mantenimiento periódico
+
+· Ejecuta VACUUM y ANALYZE regularmente (Supabase lo hace automáticamente, pero en tablas muy activas puede ayudar hacerlo manual en horas de baja carga).
+· Monitorea consultas lentas con pg_stat_statements.
+
+9. Evita funciones pesadas en consultas frecuentes
+
+· Si usas funciones recursivas (CTE) para calcular el árbol, hazlo solo cuando sea necesario. Prefiere la tabla referrals para consultas frecuentes.
+· Para cálculos de comisiones, puedes crear funciones PL/pgSQL que usen la tabla referrals y operen en lotes, no fila por fila.
+
+---
+
+🚀 Recomendación final
+
+1. Empieza con la tabla referrals y los triggers desde el principio. Esto hará que las consultas de red sean ultrarrápidas y escalables.
+2. Aplica índices en todas las tablas según las columnas de búsqueda y relación.
+3. Monitorea el rendimiento con las herramientas de Supabase (GraphQL, logs) y ajusta índices si ves consultas lentas.
+4. Considera el particionamiento cuando las tablas superen el millón de registros.
+
+Con esta estructura, tu sistema MLM responderá con fluidez incluso cuando tengas miles de usuarios y transacciones diarias. ¿Necesitas ayuda con algún trigger o consulta específica?
