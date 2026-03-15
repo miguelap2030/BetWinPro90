@@ -8,13 +8,121 @@ import {
   TrendingUp,
   Shield,
   Award,
-  Users,
   ArrowUpRight,
   ArrowDownRight,
   Wallet,
   RefreshCw,
-  PiggyBank
+  PiggyBank,
+  TrendingDown,
+  Percent,
+  Calendar,
+  Clock,
+  Users
 } from 'lucide-react'
+
+/**
+ * Hook personalizado para calcular el tiempo restante para las 00:00 UTC
+ */
+function useCountdownToMidnightUTC() {
+  const [timeLeft, setTimeLeft] = useState({
+    hours: 0,
+    minutes: 0,
+    seconds: 0,
+    totalSeconds: 0
+  })
+
+  useEffect(() => {
+    const calculateTimeLeft = () => {
+      const now = new Date()
+      
+      // Obtener la hora actual en UTC
+      const utcNow = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' }))
+      
+      // Crear fecha para la próxima medianoche UTC
+      const nextMidnight = new Date(utcNow)
+      nextMidnight.setUTCHours(24, 0, 0, 0)
+      
+      // Calcular diferencia en milisegundos
+      const diff = nextMidnight - utcNow
+      const totalSeconds = Math.floor(diff / 1000)
+      
+      // Calcular horas, minutos y segundos
+      const hours = Math.floor(totalSeconds / 3600)
+      const minutes = Math.floor((totalSeconds % 3600) / 60)
+      const seconds = totalSeconds % 60
+      
+      setTimeLeft({
+        hours,
+        minutes,
+        seconds,
+        totalSeconds
+      })
+    }
+
+    // Calcular inmediatamente
+    calculateTimeLeft()
+    
+    // Actualizar cada segundo
+    const interval = setInterval(calculateTimeLeft, 1000)
+    
+    return () => clearInterval(interval)
+  }, [])
+
+  return timeLeft
+}
+
+/**
+ * Componente para mostrar el contador de próximo profit
+ */
+function ProfitCountdown() {
+  const { hours, minutes, seconds, totalSeconds } = useCountdownToMidnightUTC()
+  
+  // Formatear con ceros a la izquierda
+  const formatNumber = (num) => num.toString().padStart(2, '0')
+  
+  // Calcular porcentaje de progreso del día
+  const totalSecondsInDay = 86400 // 24 * 60 * 60
+  const progressPercent = ((totalSecondsInDay - totalSeconds) / totalSecondsInDay) * 100
+
+  return (
+    <div className="bg-gradient-to-r from-purple-900/50 to-pink-900/50 rounded-xl p-4 border border-purple-700/30">
+      <div className="flex items-center gap-2 mb-3">
+        <Clock className="text-purple-400" size={18} />
+        <p className="text-sm font-semibold text-gray-200">Próximo Profit en:</p>
+      </div>
+      
+      {/* Contador */}
+      <div className="flex items-center justify-center gap-2 mb-3">
+        <div className="bg-gray-800/80 rounded-lg px-3 py-2 min-w-[50px] text-center border border-purple-500/30">
+          <span className="text-2xl font-bold text-purple-400">{formatNumber(hours)}</span>
+          <p className="text-xs text-gray-400">hrs</p>
+        </div>
+        <span className="text-2xl font-bold text-purple-400">:</span>
+        <div className="bg-gray-800/80 rounded-lg px-3 py-2 min-w-[50px] text-center border border-purple-500/30">
+          <span className="text-2xl font-bold text-pink-400">{formatNumber(minutes)}</span>
+          <p className="text-xs text-gray-400">min</p>
+        </div>
+        <span className="text-2xl font-bold text-purple-400">:</span>
+        <div className="bg-gray-800/80 rounded-lg px-3 py-2 min-w-[50px] text-center border border-purple-500/30">
+          <span className="text-2xl font-bold text-green-400">{formatNumber(seconds)}</span>
+          <p className="text-xs text-gray-400">seg</p>
+        </div>
+      </div>
+      
+      {/* Barra de progreso */}
+      <div className="relative h-2 bg-gray-800 rounded-full overflow-hidden">
+        <div 
+          className="absolute top-0 left-0 h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-1000"
+          style={{ width: `${progressPercent}%` }}
+        />
+      </div>
+      
+      <p className="text-xs text-gray-400 text-center mt-2">
+        Se acredita a las 00:00 UTC
+      </p>
+    </div>
+  )
+}
 
 export default function Panel() {
   const navigate = useNavigate()
@@ -75,6 +183,8 @@ export default function Panel() {
     total_retirado: 0,
     total_comisiones: 0,
     total_earnings: 0,
+    profit_daily: 0,
+    expected_daily_profit: 0,
   }
 
   // Extraer variables del dashboard para uso directo
@@ -83,6 +193,8 @@ export default function Panel() {
     level_1_count = 0,
     level_2_count = 0,
     level_3_count = 0,
+    profit_daily = 0,
+    expected_daily_profit = 0,
   } = data || {}
 
   const handleTransfer = async (e) => {
@@ -215,106 +327,144 @@ export default function Panel() {
           </div>
         </div>
 
-        {/* Referral Stats */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          {/* Team Overview */}
+        {/* Profit & Stats Cards */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+          {/* Profit Daily Card */}
           <div className="glass-card p-6">
-            <div className="flex items-center gap-2 mb-6">
-              <Users className="text-purple-400" size={24} />
-              <h2 className="text-xl font-bold text-gray-200">Tu Red de Referidos</h2>
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-10 h-10 bg-gradient-to-br from-green-400 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg">
+                <Percent className="text-white" size={24} />
+              </div>
+              <h2 className="text-xl font-bold text-gray-200">Profit Diario</h2>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-2xl p-4">
-                <div className="flex items-center justify-between">
-                  <Users size={24} className="opacity-80" />
-                  <span className="text-3xl font-bold">{total_referrals || 0}</span>
+              <div className="bg-gradient-to-br from-green-600 to-emerald-700 text-white rounded-2xl p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <TrendingUp size={20} className="opacity-80" />
+                  <span className="text-2xl font-bold">${profit_daily?.toFixed(2) || '0.00'}</span>
                 </div>
-                <p className="text-sm opacity-90 mt-2">Total</p>
+                <p className="text-xs opacity-90">Profit Acumulado</p>
+                <p className="text-xs opacity-70 mt-1">Total ganado por inversión</p>
               </div>
 
-              <div className="bg-gradient-to-br from-pink-500 to-pink-600 text-white rounded-2xl p-4">
-                <div className="flex items-center justify-between">
-                  <TrendingUp size={24} className="opacity-80" />
-                  <span className="text-3xl font-bold">{level_1_count || 0}</span>
+              <div className="bg-gradient-to-br from-blue-600 to-cyan-700 text-white rounded-2xl p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <Calendar size={20} className="opacity-80" />
+                  <span className="text-2xl font-bold">${expected_daily_profit?.toFixed(2) || '0.00'}</span>
                 </div>
-                <p className="text-sm opacity-90 mt-2">Nivel 1</p>
+                <p className="text-xs opacity-90">Profit Próximo</p>
+                <p className="text-xs opacity-70 mt-1">Se acredita a las 00:00 UTC</p>
               </div>
+            </div>
 
-              <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-2xl p-4">
-                <div className="flex items-center justify-between">
-                  <TrendingUp size={24} className="opacity-80" />
-                  <span className="text-3xl font-bold">{level_2_count || 0}</span>
-                </div>
-                <p className="text-sm opacity-90 mt-2">Nivel 2</p>
-              </div>
+            {/* Contador para el próximo profit */}
+            <div className="mt-4">
+              <ProfitCountdown />
+            </div>
 
-              <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-2xl p-4">
-                <div className="flex items-center justify-between">
-                  <TrendingUp size={24} className="opacity-80" />
-                  <span className="text-3xl font-bold">{level_3_count || 0}</span>
-                </div>
-                <p className="text-sm opacity-90 mt-2">Nivel 3</p>
+            <div className="mt-4 p-3 bg-green-900/20 border border-green-700/30 rounded-xl">
+              <div className="flex items-center gap-2">
+                <Percent className="text-green-400" size={16} />
+                <p className="text-sm text-gray-300">
+                  <strong className="text-green-400">3% diario</strong> sobre tu saldo invertido
+                </p>
               </div>
             </div>
           </div>
 
-          {/* Quick Actions */}
+          {/* Investment Stats */}
           <div className="glass-card p-6">
-            <div className="flex items-center gap-2 mb-6">
-              <Wallet className="text-green-400" size={24} />
-              <h2 className="text-xl font-bold text-gray-200">Acciones Rápidas</h2>
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-10 h-10 bg-gradient-to-br from-purple-400 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
+                <TrendingDown className="text-white" size={24} />
+              </div>
+              <h2 className="text-xl font-bold text-gray-200">Resumen de Inversión</h2>
             </div>
 
             <div className="space-y-3">
-              <button
-                onClick={() => setShowTransferModal(true)}
-                className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-purple-900/30 to-pink-900/30 hover:from-purple-900/50 hover:to-pink-900/50 rounded-xl transition-all group border border-gray-700/50"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
-                    <RefreshCw className="text-white" size={20} />
-                  </div>
-                  <div className="text-left">
-                    <p className="font-semibold text-gray-200">Transferir Fondos</p>
-                    <p className="text-sm text-gray-400">Entre disponible e invertido</p>
-                  </div>
+              <div className="flex items-center justify-between p-3 bg-gray-800/30 rounded-xl">
+                <div className="flex items-center gap-2">
+                  <Wallet className="text-purple-400" size={18} />
+                  <span className="text-sm text-gray-300">Saldo Invertido</span>
                 </div>
-                <ArrowUpRight className="text-gray-400 group-hover:text-purple-400 transition-colors" size={20} />
-              </button>
+                <span className="text-lg font-bold text-purple-400">${data.balance_invertido?.toFixed(2) || '0.00'}</span>
+              </div>
 
-              <button
-                onClick={() => navigate('/dashboard/depositar')}
-                className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-green-900/30 to-blue-900/30 hover:from-green-900/50 hover:to-blue-900/50 rounded-xl transition-all group border border-gray-700/50"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-blue-500 rounded-lg flex items-center justify-center">
-                    <DollarSign className="text-white" size={20} />
-                  </div>
-                  <div className="text-left">
-                    <p className="font-semibold text-gray-200">Depositar</p>
-                    <p className="text-sm text-gray-400">Agrega fondos a tu cuenta</p>
-                  </div>
+              <div className="flex items-center justify-between p-3 bg-gray-800/30 rounded-xl">
+                <div className="flex items-center gap-2">
+                  <DollarSign className="text-green-400" size={18} />
+                  <span className="text-sm text-gray-300">Saldo Disponible</span>
                 </div>
-                <ArrowUpRight className="text-gray-400 group-hover:text-green-400 transition-colors" size={20} />
-              </button>
+                <span className="text-lg font-bold text-green-400">${data.balance_disponible?.toFixed(2) || '0.00'}</span>
+              </div>
 
-              <button
-                onClick={() => navigate('/dashboard/retirar')}
-                className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-yellow-900/30 to-orange-900/30 hover:from-yellow-900/50 hover:to-orange-900/50 rounded-xl transition-all group border border-gray-700/50"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-gradient-to-br from-yellow-500 to-orange-500 rounded-lg flex items-center justify-center">
-                    <Award className="text-white" size={20} />
-                  </div>
-                  <div className="text-left">
-                    <p className="font-semibold text-gray-200">Retirar</p>
-                    <p className="text-sm text-gray-400">Retira tus ganancias</p>
-                  </div>
+              <div className="flex items-center justify-between p-3 bg-gray-800/30 rounded-xl">
+                <div className="flex items-center gap-2">
+                  <Award className="text-yellow-400" size={18} />
+                  <span className="text-sm text-gray-300">Total Retirado</span>
                 </div>
-                <ArrowUpRight className="text-gray-400 group-hover:text-yellow-400 transition-colors" size={20} />
-              </button>
+                <span className="text-lg font-bold text-yellow-400">${data.total_retirado?.toFixed(2) || '0.00'}</span>
+              </div>
             </div>
+          </div>
+        </div>
+
+        {/* Quick Actions */}
+        <div className="glass-card p-6 mb-4">
+          <div className="flex items-center gap-2 mb-6">
+            <Wallet className="text-green-400" size={24} />
+            <h2 className="text-xl font-bold text-gray-200">Acciones Rápidas</h2>
+          </div>
+
+          <div className="space-y-3">
+            <button
+              onClick={() => setShowTransferModal(true)}
+              className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-purple-900/30 to-pink-900/30 hover:from-purple-900/50 hover:to-pink-900/50 rounded-xl transition-all group border border-gray-700/50"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
+                  <RefreshCw className="text-white" size={20} />
+                </div>
+                <div className="text-left">
+                  <p className="font-semibold text-gray-200">Transferir Fondos</p>
+                  <p className="text-sm text-gray-400">Entre disponible e invertido</p>
+                </div>
+              </div>
+              <ArrowUpRight className="text-gray-400 group-hover:text-purple-400 transition-colors" size={20} />
+            </button>
+
+            <button
+              onClick={() => navigate('/dashboard/depositar')}
+              className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-green-900/30 to-blue-900/30 hover:from-green-900/50 hover:to-blue-900/50 rounded-xl transition-all group border border-gray-700/50"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-blue-500 rounded-lg flex items-center justify-center">
+                  <DollarSign className="text-white" size={20} />
+                </div>
+                <div className="text-left">
+                  <p className="font-semibold text-gray-200">Depositar</p>
+                  <p className="text-sm text-gray-400">Agrega fondos a tu cuenta</p>
+                </div>
+              </div>
+              <ArrowUpRight className="text-gray-400 group-hover:text-green-400 transition-colors" size={20} />
+            </button>
+
+            <button
+              onClick={() => navigate('/dashboard/retirar')}
+              className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-yellow-900/30 to-orange-900/30 hover:from-yellow-900/50 hover:to-orange-900/50 rounded-xl transition-all group border border-gray-700/50"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-yellow-500 to-orange-500 rounded-lg flex items-center justify-center">
+                  <Award className="text-white" size={20} />
+                </div>
+                <div className="text-left">
+                  <p className="font-semibold text-gray-200">Retirar</p>
+                  <p className="text-sm text-gray-400">Retira tus ganancias</p>
+                </div>
+              </div>
+              <ArrowUpRight className="text-gray-400 group-hover:text-yellow-400 transition-colors" size={20} />
+            </button>
           </div>
         </div>
 

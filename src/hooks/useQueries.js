@@ -141,18 +141,48 @@ export function useWallet(userId) {
     queryKey: ['wallet', userId],
     queryFn: async () => {
       if (!userId) return null
-      
+
       const { data, error } = await supabase
         .from('wallets')
         .select('*')
         .eq('user_id', userId)
         .single()
-      
+
       if (error) throw error
       return data
     },
     enabled: !!userId,
     staleTime: 1000 * 30, // 30 segundos
+    retry: 1,
+  })
+}
+
+// ==================== PROFIT ====================
+export function useDailyProfit(userId) {
+  return useQuery({
+    queryKey: ['dailyProfit', userId],
+    queryFn: async () => {
+      if (!userId) return null
+
+      const { data, error } = await supabase
+        .from('wallets')
+        .select('profit_daily, balance_invertido')
+        .eq('user_id', userId)
+        .single()
+
+      if (error) throw error
+      
+      // Calcular profit esperado (3% del saldo invertido)
+      const expectedProfit = (data.balance_invertido || 0) * 0.03
+      
+      return {
+        profit_daily: data.profit_daily || 0,
+        balance_invertido: data.balance_invertido || 0,
+        expected_daily_profit: expectedProfit
+      }
+    },
+    enabled: !!userId,
+    staleTime: 1000 * 60, // 1 minuto
     retry: 1,
   })
 }

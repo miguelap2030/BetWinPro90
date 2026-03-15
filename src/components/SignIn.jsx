@@ -27,9 +27,24 @@ export default function SignIn() {
       if (error) throw error
 
       setSuccess('¡Bienvenido de nuevo! Redirigiendo...')
-      setTimeout(() => {
-        navigate('/dashboard')
-      }, 1500)
+      
+      // Verificar el rol del usuario para redirigir correctamente
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', data.user.id)
+        .single()
+      
+      // Redirigir según el rol
+      if (profile?.role === 'admin') {
+        setTimeout(() => {
+          navigate('/admin/dashboard')
+        }, 1500)
+      } else {
+        setTimeout(() => {
+          navigate('/dashboard')
+        }, 1500)
+      }
     } catch (error) {
       setError(error.message || 'Error al iniciar sesión')
     } finally {

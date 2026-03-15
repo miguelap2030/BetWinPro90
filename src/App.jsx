@@ -2,6 +2,9 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { supabase } from './lib/supabaseClient'
 
+// Componentes
+import AdminRoute from './components/AdminRoute'
+
 // Páginas
 import SignIn from './components/SignIn'
 import SignUp from './components/SignUp'
@@ -14,6 +17,7 @@ import Depositar from './pages/Depositar'
 import Retirar from './pages/Retirar'
 import Transferir from './pages/Transferir'
 import Principal from './pages/Principal'
+import AdminDashboard from './pages/admin/AdminDashboard'
 
 // Página de inicio (Landing)
 function Landing() {
@@ -218,6 +222,26 @@ function App() {
           <ProtectedRoute>
             <Transferir />
           </ProtectedRoute>
+        }
+      />
+
+      {/* Ruta de Administración (solo admin) */}
+      <Route
+        path="/admin/dashboard"
+        element={
+          <AdminRoute>
+            <AdminDashboard />
+          </AdminRoute>
+        }
+      />
+
+      {/* Ruta comodín para admin - redirige al dashboard admin */}
+      <Route
+        path="/admin/*"
+        element={
+          <AdminRoute>
+            <Navigate to="/admin/dashboard" replace />
+          </AdminRoute>
         }
       />
 
