@@ -19,6 +19,14 @@
   # VITE_SUPABASE_ANON_KEY
   # VITE_SUPABASE_SERVICE_ROLE_KEY
 
+# Desactivar escaneo de secretos para variables de Supabase
+# Estas variables SON PÚBLICAS por diseño (Supabase anon key está hecha para estar en el cliente)
+# https://docs.netlify.com/security/security-model/secrets-scanning/
+[build.secrets]
+  enabled = true
+  # Omitir escaneo para variables de Supabase (son públicas por diseño)
+  omit_keys = ["VITE_SUPABASE_URL", "VITE_SUPABASE_ANON_KEY"]
+
 # Redireccionamiento para SPA (React Router)
 # Esto permite que las rutas como /dashboard, /admin, etc. funcionen correctamente
 [[redirects]]
