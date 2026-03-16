@@ -21,7 +21,7 @@
 Ve a **Site settings** → **Environment variables** y agrega:
 
 ```
-VITE_SUPABASE_URL = https://alyboipgbixoufqftizd.supabase.co
+VITE_SUPABASE_URL = https://tu-proyecto.supabase.co
 VITE_SUPABASE_ANON_KEY = [tu-anon-key]
 VITE_SUPABASE_SERVICE_ROLE_KEY = [tu-service-role-key]
 ```

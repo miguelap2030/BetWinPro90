@@ -20,7 +20,7 @@ Si estás experimentando errores de `failed fetch` o las variables de entorno no
 
 | Variable | Valor |
 |----------|-------|
-| `VITE_SUPABASE_URL` | `https://alyboipgbixoufqftizd.supabase.co` |
+| `VITE_SUPABASE_URL` | `https://tu-proyecto.supabase.co` |
 | `VITE_SUPABASE_ANON_KEY` | *(tu anon key de Supabase)* |
 | `VITE_SUPABASE_SERVICE_ROLE_KEY` | *(tu service role key de Supabase)* |
 

@@ -32,7 +32,7 @@ Usuario A (Raíz)
 
 ### 1. Ejecutar Script SQL
 
-**URL:** https://alyboipgbixoufqftizd.supabase.co/project/sql
+**URL:** Supabase Dashboard → SQL Editor
 
 **Archivo:** `importante/SISTEMA_COMISIONES_MLM.sql`
 

@@ -111,7 +111,7 @@ VITE_SUPABASE_ANON_KEY=tu-anon-key
 VITE_SUPABASE_SERVICE_ROLE_KEY=tu-service-role-key
 ```
 
-**URL del proyecto Supabase**: `https://alyboipgbixoufqftizd.supabase.co`
+**URL del proyecto Supabase**: Configurar en variables de entorno de Netlify
 
 ---
 
