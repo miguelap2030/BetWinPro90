@@ -1,0 +1,45 @@
+# Netlify Configuration for BetWinPro90
+# https://docs.netlify.com/configure-builds/file-based-configuration/
+
+[build]
+  # Directorio donde Vite genera los archivos de build
+  publish = "dist"
+  
+  # Comando de build
+  command = "npm run build"
+
+# Variables de entorno para el build
+# IMPORTANTE: Estas son valores por defecto. 
+# Las variables REALES deben configurarse en Netlify Dashboard > Site settings > Environment variables
+[build.environment]
+  NODE_VERSION = "20"
+  NPM_VERSION = "10"
+  # Estas variables DEBEN estar configuradas en el dashboard de Netlify:
+  # VITE_SUPABASE_URL
+  # VITE_SUPABASE_ANON_KEY
+  # VITE_SUPABASE_SERVICE_ROLE_KEY
+
+# Redireccionamiento para SPA (React Router)
+# Esto permite que las rutas como /dashboard, /admin, etc. funcionen correctamente
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Headers de seguridad y caché
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+# Cache para assets estáticos (JS, CSS, imágenes)
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# Funciones de Netlify (si se necesitan en el futuro)
+# [functions]
+#   directory = "netlify/functions"

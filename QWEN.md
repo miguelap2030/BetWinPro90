@@ -11,6 +11,7 @@
 - **Apuestas Deportivas**: Módulo de apuestas (en desarrollo)
 - **Transacciones**: Depósitos, retiros y transferencias internas
 - **Dashboard**: Panel de control con métricas de inversión y red MLM
+- **Panel Admin**: Gestión de usuarios, aprobación de depósitos/retiros
 
 ---
 
@@ -33,8 +34,8 @@
 ```
 BetWinPro90/
 ├── src/
-│   ├── components/       # Componentes UI (SignIn, SignUp, Sidebar)
-│   ├── hooks/            # Custom hooks con React Query (useQueries.js)
+│   ├── components/       # Componentes UI (SignIn, SignUp, Sidebar, AdminRoute)
+│   ├── hooks/            # Custom hooks con React Query (useQueries.js, useAdminRole.js)
 │   ├── lib/              # Utilidades y clientes (supabaseClient.js)
 │   ├── pages/            # Páginas del dashboard
 │   │   ├── Principal.jsx     # Vista principal
@@ -45,7 +46,12 @@ BetWinPro90/
 │   │   ├── Depositar.jsx     # Página de depósito
 │   │   ├── Retirar.jsx       # Página de retiro
 │   │   ├── Transferir.jsx    # Transferencias internas
-│   │   └── VerifyProfiles.jsx# Verificación de perfiles
+│   │   ├── VerifyProfiles.jsx# Verificación de perfiles
+│   │   └── admin/            # Panel de administración
+│   │       ├── AdminDashboard.jsx
+│   │       ├── AdminUsers.jsx
+│   │       ├── AdminDeposits.jsx
+│   │       └── AdminWithdrawals.jsx
 │   ├── providers/        # Proveedores de contexto (QueryProvider)
 │   ├── App.jsx           # Configuración de rutas
 │   ├── main.jsx          # Punto de entrada
@@ -102,6 +108,7 @@ Crear archivo `.env` basado en `.env.example`:
 ```env
 VITE_SUPABASE_URL=https://tu-proyecto.supabase.co
 VITE_SUPABASE_ANON_KEY=tu-anon-key
+VITE_SUPABASE_SERVICE_ROLE_KEY=tu-service-role-key
 ```
 
 **URL del proyecto Supabase**: `https://alyboipgbixoufqftizd.supabase.co`
@@ -114,7 +121,7 @@ VITE_SUPABASE_ANON_KEY=tu-anon-key
 
 | Tabla | Propósito |
 |-------|-----------|
-| `profiles` | Datos de usuario (username, email, referral_code, sponsor_id) |
+| `profiles` | Datos de usuario (username, email, referral_code, sponsor_id, role) |
 | `wallets` | Balances (disponible, invertido, comisiones, retirado) |
 | `deposits` | Depósitos de usuarios |
 | `withdrawals` | Retiros de usuarios |
@@ -136,6 +143,9 @@ VITE_SUPABASE_ANON_KEY=tu-anon-key
 | `get_commissions_by_user(user_id)` | Comisiones MLM recibidas |
 | `distribute_deposit_commissions(deposit_id)` | Distribuye comisiones automáticamente |
 | `create_user_profile(...)` | Crea perfil al registrar usuario |
+| `is_user_admin()` | Verifica si usuario es administrador |
+| `get_admin_dashboard_stats()` | Estadísticas para admin |
+| `distribute_daily_profit()` | Distribuye ganancias diarias (3%) |
 
 ### Sistema MLM Unilevel
 
@@ -149,6 +159,13 @@ VITE_SUPABASE_ANON_KEY=tu-anon-key
 - Sin tabla `referrals` (se calcula desde `profiles.sponsor_id`)
 - Trigger automático `trg_deposit_completed` distribuye comisiones
 - Manejo automático de sponsors NULL
+
+### Sistema de Ganancias Diarias
+
+- **Porcentaje**: 3% diario sobre `balance_invertido`
+- **Ejecución**: Automática vía pg_cron a las 00:00 UTC
+- **Función**: `distribute_daily_profit()`
+- **Registro**: Crea transacciones tipo `'profit'`
 
 ---
 
@@ -165,8 +182,8 @@ VITE_SUPABASE_ANON_KEY=tu-anon-key
 
 1. **React Query para todo**: Todas las consultas usan `useQuery`/`useMutation`
 2. **Invalidación de caché**: Después de mutaciones, invalidar queries relacionados
-3. **Rutas protegidas**: Componente `ProtectedRoute` verifica autenticación
-4. **Hooks personalizados**: Lógica de negocio en `src/hooks/useQueries.js`
+3. **Rutas protegidas**: Componentes `ProtectedRoute` y `AdminRoute` verifican autenticación y roles
+4. **Hooks personalizados**: Lógica de negocio en `src/hooks/useQueries.js` y `useAdminRole.js`
 
 ### Estructura de Componentes
 
@@ -199,14 +216,6 @@ export default function MiComponente() {
 
 ## 🧪 Pruebas del Sistema MLM
 
-### Scripts de Prueba Disponibles
-
-| Archivo | Propósito |
-|---------|-----------|
-| `test_registro_masivo.cjs` | Crea 12 usuarios en estructura MLM |
-| `verificar_mlm.cjs` | Verifica el árbol de referidos |
-| `test_sistema_completo.js` | Prueba integral del sistema |
-
 ### Flujo de Registro
 
 1. Usuario se registra en `/signup`
@@ -223,10 +232,10 @@ export default function MiComponente() {
 
 | Archivo | Contenido |
 |---------|-----------|
-| `MLM_SISTEMA_COMPLETO.md` | Documentación completa del sistema MLM |
 | `COMISIONES_MLM_DOCUMENTACION.md` | Sistema de comisiones y distribución |
-| `importante/*.sql` | Scripts SQL para configurar BD |
-| `importante/BETWINPRO90_BASE_DE_DATOS_COMPLETA.sql` | Schema completo de BD |
+| `ADMIN_CONFIG.md` | Configuración de administradores |
+| `README_DOCS.md` | Referencia de cron jobs y estructura |
+| `importante/sql/*.sql` | Scripts SQL para configurar BD |
 
 ---
 
@@ -257,6 +266,13 @@ export default function MiComponente() {
 - El trigger `trg_deposit_completed` existe
 - Los usuarios tienen `sponsor_id` configurado
 
+### Admin no puede acceder
+
+**Solución**:
+1. Verificar que `role = 'admin'` en `profiles`
+2. Ejecutar script `ADMIN_ROLE_VERIFICATION.sql`
+3. Verificar que `is_user_admin()` retorna `true`
+
 ---
 
 ## 📞 Recursos Adicionales
@@ -265,3 +281,33 @@ export default function MiComponente() {
 - **TanStack Query Docs**: https://tanstack.com/query/latest
 - **TailwindCSS**: https://tailwindcss.com/docs
 - **React Router**: https://reactrouter.com/
+
+---
+
+## 🔑 Hooks Disponibles
+
+### Autenticación
+- `useAuth()` - Estado de sesión
+- `useSignIn()` - Iniciar sesión
+- `useSignUp()` - Registrar usuario
+- `useSignOut()` - Cerrar sesión
+
+### Perfil y Wallet
+- `useProfile(userId)` - Datos del perfil
+- `useWallet(userId)` - Balance del usuario
+- `useDailyProfit(userId)` - Ganancias diarias
+
+### Dashboard y MLM
+- `useDashboardSummary(userId)` - Resumen del dashboard
+- `useReferralsTree(userId)` - Árbol de referidos
+- `useTransactions(userId, limit)` - Historial de transacciones
+- `useCommissions(userId)` - Comisiones MLM
+
+### Operaciones
+- `useCreateDeposit()` - Crear depósito
+- `useCreateWithdrawal()` - Crear retiro
+- `useTransferInternal()` - Transferencia interna
+
+### Admin
+- `useAdminRole()` - Verificar rol de administrador
+- `useAdminDashboardStats()` - Estadísticas de admin
