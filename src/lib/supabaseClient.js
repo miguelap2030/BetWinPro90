@@ -6,12 +6,8 @@ const supabaseServiceRoleKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY?.t
 
 // Validación estricta de variables de entorno
 if (!supabaseUrl || !supabaseAnonKey) {
-  const errorMsg = '⚠️ ERROR: Faltan variables de entorno de Supabase. ' +
-    'Verifica que VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY estén configuradas en Netlify.'
-  console.error(errorMsg)
-  console.error('VITE_SUPABASE_URL:', supabaseUrl ? '✅ configurada' : '❌ faltante')
-  console.error('VITE_SUPABASE_ANON_KEY:', supabaseAnonKey ? '✅ configurada' : '❌ faltante')
-  
+  const errorMsg = '⚠️ ERROR: Faltan variables de entorno de Supabase.'
+
   // Lanzar error en producción para fallo temprano
   if (import.meta.env.PROD) {
     throw new Error(errorMsg)
