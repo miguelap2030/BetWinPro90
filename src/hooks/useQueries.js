@@ -123,16 +123,38 @@ export function useValidateReferralCode() {
         return null
       }
 
-      // Usar función RPC para validar código de referido (bypass RLS)
-      const { data, error } = await supabase
-        .rpc('validate_referral_code', { p_referral_code: referralCode.toUpperCase().trim() })
+      const codigoNormalizado = referralCode.toUpperCase().trim()
+
+      // Intentar primero con la función RPC (bypass RLS)
+      try {
+        const { data, error } = await supabase
+          .rpc('validate_referral_code', { p_referral_code: codigoNormalizado })
+          .maybeSingle()
+
+        // Si la función RPC funciona, retornar el resultado
+        if (!error) {
+          return data
+        }
+
+        // Si hay error, probablemente la función no existe aún
+        // Fallback: consulta directa a profiles
+        console.warn('Función RPC no disponible, usando fallback:', error.message)
+      } catch (rpcError) {
+        console.warn('RPC falló, usando consulta directa:', rpcError.message)
+      }
+
+      // Fallback: consulta directa (puede fallar por RLS)
+      const { data, error: fallbackError } = await supabase
+        .from('profiles')
+        .select('id, username, referral_code')
+        .eq('referral_code', codigoNormalizado)
         .maybeSingle()
 
-      if (error) {
-        console.error('Error validando código de referido:', error)
-        throw error
+      if (fallbackError) {
+        console.error('Error validando código de referido:', fallbackError)
+        throw fallbackError
       }
-      
+
       return data
     },
   })
