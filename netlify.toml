@@ -24,8 +24,9 @@
 # https://docs.netlify.com/security/security-model/secrets-scanning/
 [build.secrets]
   enabled = true
-  # Omitir escaneo para variables de Supabase (son públicas por diseño)
-  omit_keys = ["VITE_SUPABASE_URL", "VITE_SUPABASE_ANON_KEY"]
+  # Omitir escaneo para variables VITE_ de Supabase (son públicas por diseño)
+  # Las variables VITE_ se exponen en el cliente por defecto en Vite
+  omit_keys = ["VITE_SUPABASE_URL", "VITE_SUPABASE_ANON_KEY", "VITE_SUPABASE_SERVICE_ROLE_KEY"]
 
 # Redireccionamiento para SPA (React Router)
 # Esto permite que las rutas como /dashboard, /admin, etc. funcionen correctamente
