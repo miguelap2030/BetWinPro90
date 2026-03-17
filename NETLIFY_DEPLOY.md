@@ -18,13 +18,7 @@ Si estás experimentando errores de `failed fetch` o las variables de entorno no
 2. Navega a **Site settings** > **Environment variables**
 3. Agrega las siguientes variables:
 
-| Variable | Valor |
-|----------|-------|
-| `VITE_SUPABASE_URL` | `https://tu-proyecto.supabase.co` |
-| `VITE_SUPABASE_ANON_KEY` | *(tu anon key de Supabase)* |
-| `VITE_SUPABASE_SERVICE_ROLE_KEY` | *(tu service role key de Supabase)* |
-
-**⚠️ IMPORTANTE:** 
+**⚠️ IMPORTANTE:**
 - Las variables DEBEN tener el prefijo `VITE_` para que Vite las exponga al cliente
 - Después de agregar las variables, debes hacer un **nuevo deploy** para que surtan efecto
 
@@ -54,17 +48,17 @@ En **Site settings** > **Build & deploy** > **Environment**:
 
 ```toml
 [build]
-  publish = "dist"
-  command = "npm run build"
+publish = "dist"
+command = "npm run build"
 
 [build.environment]
-  NODE_VERSION = "20"
-  NPM_VERSION = "10"
+NODE_VERSION = "20"
+NPM_VERSION = "10"
 
 [[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
+from = "/*"
+to = "/index.html"
+status = 200
 ```
 
 ### `vite.config.js` (Actualizado)
@@ -94,7 +88,7 @@ Esto permite que React Router funcione correctamente en Netlify.
 
 ### Problema 2: Error de autenticación con Supabase
 
-**Causa:** `VITE_SUPABASE_ANON_KEY` incorrecta o faltante.
+**Causa:** incorrecta o faltante.
 
 **Solución:**
 1. Ve a Supabase Dashboard > Settings > API
@@ -136,19 +130,6 @@ Durante el build en Netlify, las variables se muestran en el log (solo las que n
 
 ## 📝 Checklist de Verificación
 
-- [ ] Variables de entorno configuradas en Netlify Dashboard
-- [ ] `VITE_SUPABASE_URL` configurada correctamente
-- [ ] `VITE_SUPABASE_ANON_KEY` configurada correctamente
-- [ ] `VITE_SUPABASE_SERVICE_ROLE_KEY` configurada correctamente
-- [ ] `netlify.toml` existe en el repositorio
-- [ ] `public/_redirects` existe con el contenido correcto
-- [ ] Node.js versión 20 configurada
-- [ ] Build command: `npm run build`
-- [ ] Publish directory: `dist`
-- [ ] Último deploy completado exitosamente
-
----
-
 ## 🔄 Cómo Hacer Deploy de Cambios
 
 ### Opción 1: Conectar Repositorio Git (Recomendado)
@@ -181,11 +162,11 @@ netlify deploy --prod
 
 ### Variables Secretas
 
-- ✅ `VITE_SUPABASE_ANON_KEY` - Puede estar expuesta (es pública por diseño)
+- ✅ `V Puede estar expuesta (es pública por diseño)
 - ⚠️ `VITE_SUPABASE_SERVICE_ROLE_KEY` - **NO** debe usarse en el frontend
-  - Esta variable solo debe usarse en funciones serverless o backend
-  - En Netlify, aunque tenga `VITE_`, se expone en el bundle JS
-  - **Recomendación:** Remover `VITE_SUPABASE_SERVICE_ROLE_KEY` del frontend y usar solo en Netlify Functions si es necesario
+- Esta variable solo debe usarse en funciones serverless o backend
+- En Netlify, aunque tenga `VITE_`, se expone en el bundle JS
+- **Recomendación:** Remover `VITE_SUPABASE_SERVICE_ROLE_KEY` del frontend y usar solo en Netlify Functions si es necesario
 
 ### Configuración Recomendada
 

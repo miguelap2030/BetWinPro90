@@ -6,11 +6,9 @@ Se ha implementado el sistema de roles para administradores con las siguientes c
 
 ### 1. Variables de Entorno Actualizadas
 
-Se agregó la `SUPABASE_SERVICE_ROLE_KEY` al archivo `.env`:
+Se agregó la  al archivo 
 
-```env
-VITE_SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-```
+
 
 **Importante**: Esta clave permite acceso total a la base de datos. Nunca compartirla ni subirla a repositorios públicos.
 
@@ -71,8 +69,8 @@ Ejecuta `importante/sql/crear_admin.sql` que crea:
 
 ```sql
 -- Reemplaza con el email del usuario
-UPDATE profiles 
-SET role = 'admin' 
+UPDATE profiles
+SET role = 'admin'
 WHERE email = 'tu-email@admin.com';
 ```
 
@@ -88,14 +86,14 @@ Ejecuta estas consultas para verificar:
 
 ```sql
 -- 1. Verificar que las funciones existen
-SELECT routine_name 
-FROM information_schema.routines 
-WHERE routine_schema = 'public' 
-  AND routine_name LIKE 'is_user_admin%';
+SELECT routine_name
+FROM information_schema.routines
+WHERE routine_schema = 'public'
+AND routine_name LIKE 'is_user_admin%';
 
 -- 2. Ver usuarios admin
-SELECT id, username, email, role, is_active 
-FROM profiles 
+SELECT id, username, email, role, is_active
+FROM profiles
 WHERE role = 'admin';
 
 -- 3. Probar función (después de loguearte como admin)
@@ -177,42 +175,42 @@ SELECT is_user_admin();
 
 ```
 1. Usuario ingresa credenciales en /signin
-   ↓
+↓
 2. Supabase Auth autentica
-   ↓
+↓
 3. Se consulta profiles.role
-   ↓
+↓
 4. Si role = 'admin' → /admin/dashboard
-   Si role = 'user' → /dashboard
+Si role = 'user' → /dashboard
 ```
 
 ### Protección de Ruta Admin
 
 ```
 1. Intenta acceder a /admin/*
-   ↓
+↓
 2. AdminRoute verifica sesión
-   ↓
+↓
 3. Ejecuta is_user_admin() RPC
-   ↓
+↓
 4. Si true → Muestra dashboard admin
-   Si false → Redirige a /dashboard/principal
+Si false → Redirige a /dashboard/principal
 ```
 
 ### Aprobación de Retiro
 
 ```
 1. Admin hace clic en "Aprobar Retiro"
-   ↓
+↓
 2. Llama a admin_process_withdrawal()
-   ↓
+↓
 3. La función:
-   - Verifica saldo del usuario
-   - Actualiza withdrawal.status = 'approved'
-   - Resta de wallets.balance_disponible
-   - Suma a wallets.total_retirado
-   - Crea transacción
-   ↓
+- Verifica saldo del usuario
+- Actualiza withdrawal.status = 'approved'
+- Resta de wallets.balance_disponible
+- Suma a wallets.total_retirado
+- Crea transacción
+↓
 4. Se actualiza la UI
 ```
 
@@ -242,7 +240,7 @@ UPDATE profiles SET role = 'admin' WHERE email = 'tu-email@ejemplo.com';
 **Solución**:
 ```sql
 -- Verificar columna
-SELECT column_name FROM information_schema.columns 
+SELECT column_name FROM information_schema.columns
 WHERE table_name = 'profiles' AND column_name = 'role';
 
 -- Si no existe, ejecutar el script SQL
@@ -257,8 +255,8 @@ UPDATE profiles SET role = 'user' WHERE role IS NULL;
 
 **Solución**: Verificar que las funciones tengan `SECURITY DEFINER`:
 ```sql
-SELECT routine_name, security_type 
-FROM information_schema.routines 
+SELECT routine_name, security_type
+FROM information_schema.routines
 WHERE routine_schema = 'public';
 ```
 
@@ -269,31 +267,31 @@ WHERE routine_schema = 'public';
 ### Buenas Prácticas
 
 1. **Nunca exponer Service Role Key en el frontend**
-   - El cliente `supabaseAdmin` solo debe usarse en backend o edge functions
-   - Para el frontend, usar siempre el cliente normal con RLS
+- El cliente `supabaseAdmin` solo debe usarse en backend o edge functions
+- Para el frontend, usar siempre el cliente normal con RLS
 
 2. **Múltiples admins**
-   - Crear máximo 2-3 usuarios admin
-   - Usar rol `moderator` para permisos limitados
+- Crear máximo 2-3 usuarios admin
+- Usar rol `moderator` para permisos limitados
 
 3. **Auditoría**
-   - Todas las acciones admin quedan registradas en `notes`
-   - Revisar periódicamente los logs de transacciones
+- Todas las acciones admin quedan registradas en `notes`
+- Revisar periódicamente los logs de transacciones
 
 ### Políticas RLS Actuales
 
 ```sql
 -- Solo admins pueden ver todos los perfiles
 CREATE POLICY "Admins pueden ver todos los perfiles"
-  ON profiles FOR SELECT
-  TO authenticated
-  USING (role = 'admin');
+ON profiles FOR SELECT
+TO authenticated
+USING (role = 'admin');
 
 -- Solo admins pueden actualizar roles
 CREATE POLICY "Admins pueden actualizar roles"
-  ON profiles FOR UPDATE
-  TO authenticated
-  USING (role = 'admin');
+ON profiles FOR UPDATE
+TO authenticated
+USING (role = 'admin');
 ```
 
 ---
@@ -301,17 +299,17 @@ CREATE POLICY "Admins pueden actualizar roles"
 ## Referencias
 
 - **SQL Scripts**: `/importante/sql/`
-  - `ADMIN_ROLE_VERIFICATION.sql` - Configuración completa
-  - `crear_admin.sql` - Crear usuario admin por defecto
-  - `ADMIN_DASHBOARD_SETUP.sql` - Script original
+- `ADMIN_ROLE_VERIFICATION.sql` - Configuración completa
+- `crear_admin.sql` - Crear usuario admin por defecto
+- `ADMIN_DASHBOARD_SETUP.sql` - Script original
 
 - **Componentes**:
-  - `src/components/AdminRoute.jsx` - Protección de rutas
-  - `src/components/SignIn.jsx` - Login con redirección por rol
-  - `src/pages/admin/` - Dashboard y componentes admin
+- `src/components/AdminRoute.jsx` - Protección de rutas
+- `src/components/SignIn.jsx` - Login con redirección por rol
+- `src/pages/admin/` - Dashboard y componentes admin
 
 - **Hooks**:
-  - `src/hooks/useAdminRole.js` - Hooks para verificar rol y estadísticas
+- `src/hooks/useAdminRole.js` - Hooks para verificar rol y estadísticas
 
 ---
 
@@ -331,6 +329,6 @@ SELECT is_user_admin(); -- Ejecutar logueado como admin
 SELECT * FROM get_admin_dashboard_stats();
 
 -- Listar funciones RPC
-SELECT routine_name FROM information_schema.routines 
+SELECT routine_name FROM information_schema.routines
 WHERE routine_schema = 'public' AND routine_type = 'FUNCTION';
 ```

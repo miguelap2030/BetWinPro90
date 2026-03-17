@@ -105,11 +105,7 @@ npm run lint
 
 Crear archivo `.env` basado en `.env.example`:
 
-```env
-VITE_SUPABASE_URL=https://tu-proyecto.supabase.co
-VITE_SUPABASE_ANON_KEY=tu-anon-key
-VITE_SUPABASE_SERVICE_ROLE_KEY=tu-service-role-key
-```
+
 
 **URL del proyecto Supabase**: Configurar en variables de entorno de Netlify
 
