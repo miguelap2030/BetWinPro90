@@ -122,14 +122,17 @@ export function useValidateReferralCode() {
       if (!referralCode || referralCode.trim() === '') {
         return null
       }
-      
+
+      // Usar función RPC para validar código de referido (bypass RLS)
       const { data, error } = await supabase
-        .from('profiles')
-        .select('id, username, referral_code')
-        .eq('referral_code', referralCode.toUpperCase().trim())
+        .rpc('validate_referral_code', { p_referral_code: referralCode.toUpperCase().trim() })
         .maybeSingle()
+
+      if (error) {
+        console.error('Error validando código de referido:', error)
+        throw error
+      }
       
-      if (error) throw error
       return data
     },
   })
