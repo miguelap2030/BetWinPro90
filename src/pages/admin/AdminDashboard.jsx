@@ -1,9 +1,12 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAdminRole, useAdminDashboardStats } from '../../hooks/useAdminRole.js'
+import { useSignOut } from '../../hooks/useQueries.js'
 import { Navigate } from 'react-router-dom'
-import { 
-  Users, DollarSign, TrendingUp, TrendingDown, Clock, CheckCircle, 
-  XCircle, Wallet, ArrowUpRight, ArrowDownLeft, Activity, Shield, UserCheck
+import {
+  Users, DollarSign, TrendingUp, TrendingDown, Clock, CheckCircle,
+  XCircle, Wallet, ArrowUpRight, ArrowDownLeft, Activity, Shield, UserCheck,
+  LogOut
 } from 'lucide-react'
 import AdminUsers from './AdminUsers'
 import AdminWithdrawals from './AdminWithdrawals'
@@ -45,9 +48,16 @@ function TabButton({ active, onClick, children, icon: Icon }) {
 }
 
 export default function AdminDashboard() {
+  const navigate = useNavigate()
   const { isAdmin, loading: adminLoading } = useAdminRole()
   const { stats, loading: statsLoading, refreshStats } = useAdminDashboardStats()
+  const signOutMutation = useSignOut()
   const [activeTab, setActiveTab] = useState('dashboard')
+
+  const handleSignOut = async () => {
+    await signOutMutation.mutateAsync()
+    navigate('/signin')
+  }
 
   // Si no es admin, redirigir
   if (!adminLoading && !isAdmin) {
@@ -81,12 +91,22 @@ export default function AdminDashboard() {
                 <p className="text-gray-400 text-sm">Gestión y monitoreo de la plataforma</p>
               </div>
             </div>
-            <button
-              onClick={refreshStats}
-              className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl text-white font-medium hover:shadow-lg transition-all duration-200"
-            >
-              Actualizar
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={refreshStats}
+                className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl text-white font-medium hover:shadow-lg transition-all duration-200"
+              >
+                Actualizar
+              </button>
+              <button
+                onClick={handleSignOut}
+                className="flex items-center gap-2 px-4 py-2 bg-red-500/20 border border-red-500/50 rounded-xl text-red-400 font-medium hover:bg-red-500/30 transition-all duration-200"
+                title="Cerrar sesión"
+              >
+                <LogOut className="w-5 h-5" />
+                <span className="hidden sm:inline">Salir</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>

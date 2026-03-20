@@ -37,31 +37,35 @@ export function useSignIn() {
 
 export function useSignUp() {
   const queryClient = useQueryClient()
-  
+
   return useMutation({
     mutationFn: async ({ email, password, referralCode }) => {
-      // 1. Buscar sponsor si hay referral code
+      // 1. Buscar sponsor si hay referral code usando RPC (bypass RLS)
       let sponsorId = null
       if (referralCode && referralCode.trim() !== '') {
-        const { data: sponsorData } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('referral_code', referralCode.toUpperCase().trim())
-          .maybeSingle()
+        const codigoNormalizado = referralCode.toUpperCase().trim()
         
-        if (sponsorData) {
+        // Usar función RPC validate_referral_code para evitar problemas de RLS
+        const { data: sponsorData, error: sponsorError } = await supabase
+          .rpc('validate_referral_code', { p_referral_code: codigoNormalizado })
+          .maybeSingle()
+
+        if (!sponsorError && sponsorData && sponsorData.id) {
           sponsorId = sponsorData.id
+          console.log('✅ Sponsor encontrado:', sponsorData.username, 'ID:', sponsorId)
+        } else {
+          console.warn('⚠️ Código de referido no encontrado:', codigoNormalizado)
         }
       }
-      
+
       // 2. Registrar usuario
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
       })
-      
+
       if (authError) throw authError
-      
+
       // 3. Crear perfil usando RPC
       const { error: profileError } = await supabase.rpc('create_user_profile', {
         p_user_id: authData.user.id,
@@ -70,9 +74,9 @@ export function useSignUp() {
         p_sponsor_id: sponsorId,
         p_referral_code: null,
       })
-      
+
       if (profileError) throw profileError
-      
+
       return authData
     },
     onSuccess: () => {
@@ -263,12 +267,16 @@ export function useTransactions(userId, limit = 100) {
     queryKey: ['transactions', userId, limit],
     queryFn: async () => {
       if (!userId) return []
-      
+
       const { data, error } = await supabase
         .rpc('get_user_transactions', { p_user_id: userId, p_limit: limit })
-      
+
       if (error) throw error
-      return data || []
+      // Mapear para asegurar que status tenga valor por defecto
+      return (data || []).map(t => ({
+        ...t,
+        status: t.status || 'completed'
+      }))
     },
     enabled: !!userId,
     staleTime: 1000 * 30, // 30 segundos
@@ -370,7 +378,7 @@ export function useCreateWithdrawal() {
 // ==================== TRANSFERS ====================
 export function useTransferInternal() {
   const queryClient = useQueryClient()
-  
+
   return useMutation({
     mutationFn: async ({ userId, amount, type }) => {
       // Obtener wallet actual
@@ -379,17 +387,22 @@ export function useTransferInternal() {
         .select('*')
         .eq('user_id', userId)
         .single()
-      
+
       if (!walletData) throw new Error('Wallet no encontrada')
-      
+
+      // Calcular comisión del 10% para transferencias de invertido a disponible
+      const feePercentage = type === 'from_invested' ? 0.10 : 0
+      const feeAmount = parseFloat(amount) * feePercentage
+      const amountAfterFee = parseFloat(amount) - feeAmount
+
       if (type === 'to_invested' && amount > walletData.balance_disponible) {
         throw new Error('Saldo disponible insuficiente')
       }
-      
+
       if (type === 'from_invested' && amount > walletData.balance_invertido) {
         throw new Error('Saldo invertido insuficiente')
       }
-      
+
       // Insertar transferencia
       const { error: transferError } = await supabase
         .from('transfers_internas')
@@ -399,37 +412,83 @@ export function useTransferInternal() {
           type,
           from_wallet: type === 'to_invested' ? 'disponible' : 'invertido',
           to_wallet: type === 'to_invested' ? 'invertido' : 'disponible',
-          description: type === 'to_invested' 
-            ? 'Transferencia a inversión' 
-            : 'Retiro de inversión',
         })
-      
+
       if (transferError) throw transferError
-      
+
+      // Crear transacción de transferencia
+      if (type === 'from_invested') {
+        // Transferencia de invertido a disponible con comisión
+        // Transacción de salida (transfer_out) por el monto total
+        await supabase.rpc('create_transaction', {
+          p_user_id: userId,
+          p_type: 'transfer_out',
+          p_amount: parseFloat(amount),
+          p_description: `Transferencia a disponible (comisión 10%: $${feeAmount.toFixed(2)})`,
+          p_status: 'completed',
+          p_reference: 'transfer_interna'
+        })
+
+        // Transacción de entrada (transfer_in) por el monto neto
+        await supabase.rpc('create_transaction', {
+          p_user_id: userId,
+          p_type: 'transfer_in',
+          p_amount: amountAfterFee,
+          p_description: 'Recepción de inversión (después de comisión)',
+          p_status: 'completed',
+          p_reference: 'transfer_interna'
+        })
+      } else {
+        // Transferencia de disponible a invertido (sin comisión)
+        await supabase.rpc('create_transaction', {
+          p_user_id: userId,
+          p_type: 'transfer_out',
+          p_amount: parseFloat(amount),
+          p_description: 'Transferencia a inversión (activar)',
+          p_status: 'completed',
+          p_reference: 'transfer_interna'
+        })
+
+        await supabase.rpc('create_transaction', {
+          p_user_id: userId,
+          p_type: 'transfer_in',
+          p_amount: parseFloat(amount),
+          p_description: 'Recepción en inversión',
+          p_status: 'completed',
+          p_reference: 'transfer_interna'
+        })
+      }
+
       // Actualizar wallet
-      const updateData = type === 'to_invested'
-        ? {
-            balance_disponible: walletData.balance_disponible - amount,
-            balance_invertido: walletData.balance_invertido + amount,
-          }
-        : {
-            balance_disponible: walletData.balance_disponible + amount,
-            balance_invertido: walletData.balance_invertido - amount,
-          }
-      
+      let updateData
+      if (type === 'to_invested') {
+        // De disponible a invertido (sin comisión)
+        updateData = {
+          balance_disponible: walletData.balance_disponible - parseFloat(amount),
+          balance_invertido: walletData.balance_invertido + parseFloat(amount),
+        }
+      } else {
+        // De invertido a disponible (con comisión del 10%)
+        updateData = {
+          balance_disponible: walletData.balance_disponible + amountAfterFee,
+          balance_invertido: walletData.balance_invertido - parseFloat(amount),
+        }
+      }
+
       const { error: updateError } = await supabase
         .from('wallets')
         .update(updateData)
         .eq('user_id', userId)
-      
+
       if (updateError) throw updateError
-      
-      return { success: true }
+
+      return { success: true, feeAmount, amountAfterFee }
     },
     onSuccess: (_, variables) => {
       // Invalidar wallet y dashboard específicamente para este usuario
       queryClient.invalidateQueries({ queryKey: ['wallet', variables.userId] })
       queryClient.invalidateQueries({ queryKey: ['dashboard', variables.userId] })
+      queryClient.invalidateQueries({ queryKey: ['transactions', variables.userId] })
     },
   })
 }

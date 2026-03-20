@@ -3,9 +3,12 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import Sidebar from '../components/Sidebar'
 import { ArrowDownToLine, DollarSign, Wallet, CheckCircle, AlertCircle } from 'lucide-react'
+import { useProfile, useSignOut } from '../hooks/useQueries'
+import { useQueryClient } from '@tanstack/react-query'
 
 export default function Depositar() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [user, setUser] = useState(null)
   const [profile, setProfile] = useState(null)
   const [wallet, setWallet] = useState(null)
@@ -13,9 +16,21 @@ export default function Depositar() {
   const [amount, setAmount] = useState('')
   const [processing, setProcessing] = useState(false)
 
+  const { data: profileData } = useProfile(user?.id)
+  const signOutMutation = useSignOut()
+
   useEffect(() => {
     checkUser()
   }, [])
+
+  useEffect(() => {
+    if (profileData) setProfile(profileData)
+  }, [profileData])
+
+  const handleSignOut = async () => {
+    await signOutMutation.mutateAsync()
+    navigate('/signin')
+  }
 
   const checkUser = async () => {
     try {
@@ -57,37 +72,35 @@ export default function Depositar() {
     setProcessing(true)
 
     try {
-      // Insertar depósito como COMPLETADO
-      // El trigger trg_deposit_completed se encargará de:
-      // 1. Actualizar balance_invertido del usuario
-      // 2. Distribuir comisiones MLM a los sponsors
-      const { data: depositData, error: depositError } = await supabase
-        .from('deposits')
-        .insert({
-          user_id: user.id,
-          amount: parseFloat(amount),
-          currency: 'USD',
-          status: 'completed',
-          payment_method: 'simulado',
-          completed_at: new Date().toISOString(),
-        })
-        .select()
-        .single()
+      // 1. Crear transacción de depósito directamente
+      const { error: transactionError } = await supabase.rpc('create_transaction', {
+        p_user_id: user.id,
+        p_type: 'deposit',
+        p_amount: parseFloat(amount),
+        p_description: `Depósito de $${parseFloat(amount).toFixed(2)}`,
+        p_status: 'completed',
+        p_reference: 'deposito_simulado'
+      })
 
-      if (depositError) throw depositError
+      if (transactionError) throw transactionError
 
-      // Recargar datos de la wallet para mostrar el nuevo saldo
-      const { data: updatedWallet } = await supabase
+      // 2. Actualizar wallet - sumar al saldo invertido (para pruebas)
+      const { error: walletError } = await supabase
         .from('wallets')
-        .select('*')
+        .update({
+          balance_invertido: (wallet?.balance_invertido || 0) + parseFloat(amount),
+          updated_at: new Date().toISOString()
+        })
         .eq('user_id', user.id)
-        .single()
-      
-      if (updatedWallet) {
-        setWallet(updatedWallet)
-      }
 
-      alert(`✅ Depósito de $${parseFloat(amount).toFixed(2)} completado exitosamente\nSe han distribuido las comisiones MLM a tus sponsors.`)
+      if (walletError) throw walletError
+
+      // 3. Invalidar caché para actualizar UI
+      queryClient.invalidateQueries({ queryKey: ['wallet', user.id] })
+      queryClient.invalidateQueries({ queryKey: ['transactions', user.id] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard', user.id] })
+
+      alert(`✅ Depósito de $${parseFloat(amount).toFixed(2)} completado exitosamente`)
       navigate('/dashboard/panel')
     } catch (error) {
       console.error('Error:', error)
@@ -110,7 +123,7 @@ export default function Depositar() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-950 to-gray-900">
-      <Sidebar user={user} profile={profile} onSignOut={() => {}} />
+      <Sidebar user={user} profile={profile} onSignOut={handleSignOut} />
 
       <main className="lg:ml-0 p-3 pt-20 pb-24">
         <div className="max-w-md mx-auto">
@@ -119,16 +132,16 @@ export default function Depositar() {
             <h1 className="text-2xl font-bold bg-gradient-to-r from-green-600 to-blue-600 bg-clip-text text-transparent mb-1">
               Depositar Fondos
             </h1>
-            <p className="text-xs text-gray-400">Agrega saldo a tu cuenta disponible</p>
+            <p className="text-xs text-gray-400">Agrega saldo a tu cuenta invertida (PRUEBAS)</p>
           </div>
 
           {/* Balance Card */}
           <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl p-4 mb-4 shadow-lg text-white">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-xs opacity-90">Saldo Disponible</p>
+              <p className="text-xs opacity-90">Saldo Invertido</p>
               <DollarSign size={16} className="opacity-75" />
             </div>
-            <p className="text-3xl font-bold">${wallet?.balance_disponible?.toFixed(2) || '0.00'}</p>
+            <p className="text-3xl font-bold">${wallet?.balance_invertido?.toFixed(2) || '0.00'}</p>
           </div>
 
           {/* Info Card */}
@@ -138,9 +151,9 @@ export default function Depositar() {
                 <AlertCircle className="text-white" size={16} />
               </div>
               <div>
-                <h3 className="font-bold text-gray-200 text-sm mb-1">Depósito Simulado</h3>
+                <h3 className="font-bold text-gray-200 text-sm mb-1">Depósito Simulado - PRUEBAS</h3>
                 <p className="text-xs text-gray-400">
-                  El saldo se acreditará inmediatamente a tu cuenta disponible.
+                  El saldo se acreditará inmediatamente a tu cuenta INVERTIDA para generar ganancias del 3% diario.
                 </p>
               </div>
             </div>
@@ -162,11 +175,11 @@ export default function Depositar() {
                     placeholder="0.00"
                     className="w-full pl-8 pr-3 py-3 border-2 border-gray-700 rounded-xl focus:border-green-500 focus:ring-2 focus:ring-green-200 text-lg font-bold"
                     step="0.01"
-                    min="1"
+                    min="0.5"
                     required
                   />
                 </div>
-                <p className="text-xs text-gray-400 mt-1">Mínimo: $10.00</p>
+                <p className="text-xs text-gray-400 mt-1">Mínimo: $0.50</p>
               </div>
 
               {/* Quick Amounts */}

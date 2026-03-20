@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import Sidebar from '../components/Sidebar'
 import { ArrowRightLeft, ArrowDownUp, TrendingUp, DollarSign } from 'lucide-react'
+import { useProfile, useTransferInternal, useSignOut } from '../hooks/useQueries'
 
 export default function Transferir() {
   const navigate = useNavigate()
@@ -12,11 +13,19 @@ export default function Transferir() {
   const [loading, setLoading] = useState(true)
   const [amount, setAmount] = useState('')
   const [transferType, setTransferType] = useState('to_invested')
-  const [processing, setProcessing] = useState(false)
+  
+  // Usar el hook de transferencia
+  const transferMutation = useTransferInternal()
+  const { data: profileData } = useProfile(user?.id)
+  const signOutMutation = useSignOut()
 
   useEffect(() => {
     checkUser()
   }, [])
+
+  useEffect(() => {
+    if (profileData) setProfile(profileData)
+  }, [profileData])
 
   const checkUser = async () => {
     try {
@@ -47,9 +56,14 @@ export default function Transferir() {
     }
   }
 
+  const handleSignOut = async () => {
+    await signOutMutation.mutateAsync()
+    navigate('/signin')
+  }
+
   const handleTransfer = async (e) => {
     e.preventDefault()
-    
+
     if (!amount || parseFloat(amount) <= 0) {
       alert('Ingresa un monto válido')
       return
@@ -65,59 +79,39 @@ export default function Transferir() {
       return
     }
 
-    setProcessing(true)
-
     try {
-      // 1. Crear registro de transferencia interna
-      const { error: transferError } = await supabase
-        .from('transfers_internas')
-        .insert({
-          user_id: user.id,
-          amount: parseFloat(amount),
-          type: transferType,
-          from_wallet: transferType === 'to_invested' ? 'balance_disponible' : 'balance_invertido',
-          to_wallet: transferType === 'to_invested' ? 'balance_invertido' : 'balance_disponible'
-        })
+      const result = await transferMutation.mutateAsync({
+        userId: user.id,
+        amount: parseFloat(amount),
+        type: transferType
+      })
 
-      if (transferError) throw transferError
-
-      // 2. ACTUALIZAR SALDOS EN WALLET
-      let newBalanceDisponible, newBalanceInvertido
+      // Actualizar estado local después de la transferencia
+      const feeAmount = result?.feeAmount || 0
+      const amountAfterFee = result?.amountAfterFee || parseFloat(amount)
       
-      if (transferType === 'to_invested') {
-        // Restar de disponible, sumar a invertido
-        newBalanceDisponible = wallet.balance_disponible - parseFloat(amount)
-        newBalanceInvertido = wallet.balance_invertido + parseFloat(amount)
-      } else {
-        // Restar de invertido, sumar a disponible
-        newBalanceDisponible = wallet.balance_disponible + parseFloat(amount)
-        newBalanceInvertido = wallet.balance_invertido - parseFloat(amount)
-      }
+      const newBalanceDisponible = transferType === 'to_invested'
+        ? wallet.balance_disponible - parseFloat(amount)
+        : wallet.balance_disponible + amountAfterFee
+      const newBalanceInvertido = transferType === 'to_invested'
+        ? wallet.balance_invertido + parseFloat(amount)
+        : wallet.balance_invertido - parseFloat(amount)
 
-      const { error: walletError } = await supabase
-        .from('wallets')
-        .update({
-          balance_disponible: newBalanceDisponible,
-          balance_invertido: newBalanceInvertido
-        })
-        .eq('user_id', user.id)
-
-      if (walletError) throw walletError
-
-      // 3. Actualizar estado local
       setWallet({
         ...wallet,
         balance_disponible: newBalanceDisponible,
         balance_invertido: newBalanceInvertido
       })
 
-      alert('✅ Transferencia completada exitosamente')
+      if (feeAmount > 0) {
+        alert(`✅ Transferencia completada exitosamente\nComisión (10%): $${feeAmount.toFixed(2)}\nRecibido: $${amountAfterFee.toFixed(2)}`)
+      } else {
+        alert('✅ Transferencia completada exitosamente')
+      }
       navigate('/dashboard/panel')
     } catch (error) {
       console.error('Error:', error)
       alert('Error en la transferencia: ' + error.message)
-    } finally {
-      setProcessing(false)
     }
   }
 
@@ -134,7 +128,7 @@ export default function Transferir() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-950 to-gray-900">
-      <Sidebar user={user} profile={profile} onSignOut={() => {}} />
+      <Sidebar user={user} profile={profile} onSignOut={handleSignOut} />
 
       <main className="lg:ml-0 p-3 pt-20 pb-24">
         <div className="max-w-md mx-auto">
@@ -222,12 +216,12 @@ export default function Transferir() {
                     placeholder="0.00"
                     className="w-full pl-8 pr-3 py-3 border-2 border-gray-700 rounded-xl focus:border-purple-500 focus:ring-2 focus:ring-purple-200 text-lg font-bold"
                     step="0.01"
-                    min="1"
+                    min="0.5"
                     required
                   />
                 </div>
                 <p className="text-xs text-gray-400 mt-1">
-                  {transferType === 'to_invested' 
+                  Mínimo: $0.50 | {transferType === 'to_invested'
                     ? `Disponible: $${wallet?.balance_disponible?.toFixed(2) || '0.00'}`
                     : `Invertido: $${wallet?.balance_invertido?.toFixed(2) || '0.00'}`
                   }
@@ -240,6 +234,12 @@ export default function Transferir() {
                   <strong>Resumen:</strong> {transferType === 'to_invested' ? 'Activar' : 'Desactivar'} inversión de{' '}
                   <span className="font-bold">${amount || '0.00'}</span>
                 </p>
+                {transferType === 'from_invested' && amount && (
+                  <div className="mt-2 pt-2 border-t border-purple-600 text-xs text-purple-200">
+                    <p>Comisión (10%): <span className="font-bold text-red-300">-${(parseFloat(amount || 0) * 0.10).toFixed(2)}</span></p>
+                    <p>Recibirás: <span className="font-bold text-green-300">${(parseFloat(amount || 0) * 0.90).toFixed(2)}</span></p>
+                  </div>
+                )}
               </div>
 
               {/* Buttons */}
@@ -253,10 +253,10 @@ export default function Transferir() {
                 </button>
                 <button
                   type="submit"
-                  disabled={processing}
+                  disabled={transferMutation.isPending}
                   className="flex-1 px-4 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-semibold hover:shadow-lg disabled:opacity-50 transition-all text-sm"
                 >
-                  {processing ? 'Procesando...' : 'Transferir'}
+                  {transferMutation.isPending ? 'Procesando...' : 'Transferir'}
                 </button>
               </div>
             </form>

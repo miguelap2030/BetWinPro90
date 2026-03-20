@@ -15,9 +15,15 @@ import {
   Wallet,
   Trophy,
   Gift,
-  Search,
   Filter,
-  Download
+  Download,
+  CheckCircle2,
+  Clock,
+  XCircle,
+  AlertCircle,
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  Search
 } from 'lucide-react'
 
 export default function Transacciones() {
@@ -83,19 +89,40 @@ export default function Transacciones() {
     }
   }
 
+  const getStatusIcon = (status) => {
+    switch (status) {
+      case 'completed': return { icon: CheckCircle2, color: 'text-green-400' }
+      case 'pending': return { icon: Clock, color: 'text-yellow-400' }
+      case 'failed': return { icon: XCircle, color: 'text-red-400' }
+      case 'cancelled': return { icon: AlertCircle, color: 'text-gray-400' }
+      default: return { icon: CheckCircle2, color: 'text-green-400' }
+    }
+  }
+
   const getTransactionLabel = (type) => {
     const labels = {
       deposit: 'Depósito',
       withdrawal: 'Retiro',
       profit: 'Ganancia Diaria',
       commission: 'Comisión MLM',
-      transfer_in: 'Transferencia (Entrada)',
-      transfer_out: 'Transferencia (Salida)',
+      transfer_in: 'Transferencia (+)',
+      transfer_out: 'Transferencia (-)',
+      transfer: 'Transferencia',
       bet_win: 'Apuesta Ganada',
       bet_loss: 'Apuesta Perdida',
       bonus: 'Bono',
     }
     return labels[type] || type
+  }
+
+  const getStatusLabel = (status) => {
+    const labels = {
+      completed: 'Completado',
+      pending: 'Pendiente',
+      failed: 'Fallido',
+      cancelled: 'Cancelado',
+    }
+    return labels[status] || status
   }
 
   const formatDate = (dateString) => {
@@ -115,13 +142,6 @@ export default function Transacciones() {
 
     if (filterType !== 'all') {
       filtered = filtered.filter(t => t.type === filterType)
-    }
-
-    if (searchTerm) {
-      filtered = filtered.filter(t =>
-        t.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        t.type?.toLowerCase().includes(searchTerm.toLowerCase())
-      )
     }
 
     return filtered
@@ -154,45 +174,25 @@ export default function Transacciones() {
           <p className="text-gray-400">Historial completo de todos tus movimientos</p>
         </div>
 
-        {/* Summary Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        {/* Summary Cards - Total Depositado y Retirado */}
+        <div className="grid grid-cols-2 gap-4 mb-8">
           <div className="glass-card p-5">
             <div className="flex items-center justify-between mb-2">
-              <TrendingUp className="text-green-400" size={24} />
-              <span className="text-xs text-green-400 font-semibold">INGRESOS</span>
+              <ArrowDownToLine className="text-green-400" size={24} />
+              <span className="text-xs text-green-400 font-semibold">TOTAL DEPOSITADO</span>
             </div>
             <p className="text-2xl font-bold text-green-400">
-              ${(totalByType.deposit + totalByType.profit + totalByType.commission + totalByType.bet_win + totalByType.bonus || 0).toFixed(2)}
+              ${(totalByType.deposit || 0).toFixed(2)}
             </p>
           </div>
 
           <div className="glass-card p-5">
             <div className="flex items-center justify-between mb-2">
-              <TrendingDown className="text-red-400" size={24} />
-              <span className="text-xs text-red-400 font-semibold">SALIDAS</span>
+              <ArrowUpFromLine className="text-red-400" size={24} />
+              <span className="text-xs text-red-400 font-semibold">TOTAL RETIRADO</span>
             </div>
             <p className="text-2xl font-bold text-red-400">
-              ${(totalByType.withdrawal + totalByType.bet_loss || 0).toFixed(2)}
-            </p>
-          </div>
-
-          <div className="glass-card p-5">
-            <div className="flex items-center justify-between mb-2">
-              <RefreshCw className="text-blue-400" size={24} />
-              <span className="text-xs text-blue-400 font-semibold">TRANSFERENCIAS</span>
-            </div>
-            <p className="text-2xl font-bold text-blue-400">
-              ${(totalByType.transfer_in + totalByType.transfer_out || 0).toFixed(2)}
-            </p>
-          </div>
-
-          <div className="glass-card p-5">
-            <div className="flex items-center justify-between mb-2">
-              <Award className="text-pink-400" size={24} />
-              <span className="text-xs text-pink-400 font-semibold">COMISIONES</span>
-            </div>
-            <p className="text-2xl font-bold text-pink-400">
-              ${(totalByType.commission || 0).toFixed(2)}
+              ${(totalByType.withdrawal || 0).toFixed(2)}
             </p>
           </div>
         </div>
@@ -200,33 +200,21 @@ export default function Transacciones() {
         {/* Filters */}
         <div className="glass-card mb-6">
           <div className="flex flex-col md:flex-row gap-4">
-            {/* Search */}
-            <div className="flex-1 relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-              <input
-                type="text"
-                placeholder="Buscar transacciones..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-12 pr-4 py-3 border-2 border-gray-700 rounded-xl focus:border-purple-500 focus:outline-none"
-              />
-            </div>
-
             {/* Filter by type */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-1">
               <Filter className="text-gray-400" size={20} />
               <select
                 value={filterType}
                 onChange={(e) => setFilterType(e.target.value)}
-                className="px-4 py-3 border-2 border-gray-700 rounded-xl focus:border-purple-500 focus:outline-none bg-white"
+                className="px-4 py-3 border-2 border-gray-700 rounded-xl focus:border-purple-500 focus:outline-none bg-white flex-1"
               >
                 <option value="all">Todos los tipos</option>
                 <option value="deposit">Depósitos</option>
                 <option value="withdrawal">Retiros</option>
-                <option value="profit">Ganancias</option>
-                <option value="commission">Comisiones</option>
-                <option value="transfer_in">Transferencias</option>
-                <option value="bet_win">Apuestas</option>
+                <option value="profit">Ganancias Diarias</option>
+                <option value="commission">Comisiones MLM</option>
+                <option value="transfer_in">Transferencias (Entrada)</option>
+                <option value="transfer_out">Transferencias (Salida)</option>
                 <option value="bonus">Bonos</option>
               </select>
             </div>
@@ -240,8 +228,8 @@ export default function Transacciones() {
         </div>
 
         {/* Transactions List */}
-        <div className="glass-card">
-          <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-700">
+        <div className="glass-card max-h-[600px] flex flex-col">
+          <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-700 flex-shrink-0">
             <h2 className="text-xl font-bold text-gray-200 flex items-center gap-2">
               <CreditCard className="text-purple-400" size={24} />
               Movimientos Recientes
@@ -252,63 +240,67 @@ export default function Transacciones() {
           </div>
 
           {filteredTransactions.length === 0 ? (
-            <div className="text-center py-16">
+            <div className="text-center py-16 flex-1 flex items-center justify-center">
               <div className="w-24 h-24 bg-gradient-to-br from-purple-100 to-pink-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <CreditCard className="text-purple-400" size={48} />
               </div>
-              <h3 className="text-xl font-bold text-gray-200 mb-2">
-                No hay transacciones
-              </h3>
-              <p className="text-gray-400">
-                Tus movimientos aparecerán aquí
-              </p>
+              <div>
+                <h3 className="text-xl font-bold text-gray-200 mb-2">
+                  No hay transacciones
+                </h3>
+                <p className="text-gray-400">
+                  Tus movimientos aparecerán aquí
+                </p>
+              </div>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2 overflow-y-auto pr-2 custom-scrollbar">
               {filteredTransactions.map((transaction) => {
                 const { icon: Icon, color, bg } = getTransactionIcon(transaction.type)
+                const { icon: StatusIcon, color: statusColor } = getStatusIcon(transaction.status)
                 const isPositive = ['deposit', 'profit', 'commission', 'transfer_in', 'bet_win', 'bonus'].includes(transaction.type)
 
                 return (
                   <div
                     key={transaction.id}
-                    className="bg-gray-800 rounded-xl border border-gray-700 p-4 hover:shadow-lg transition-all"
+                    className="bg-gray-800/50 rounded-lg border border-gray-700/50 p-3 hover:bg-gray-800 hover:border-purple-500/30 transition-all"
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className={`w-12 h-12 ${bg} rounded-xl flex items-center justify-center`}>
-                          <Icon className={color} size={24} />
+                    <div className="flex items-center justify-between gap-4">
+                      {/* Icono + Tipo */}
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className={`w-8 h-8 ${bg} rounded-lg flex items-center justify-center flex-shrink-0`}>
+                          <Icon className={`${color} w-4 h-4`} size={16} />
                         </div>
-                        <div>
-                          <p className="font-semibold text-gray-200">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-gray-200 truncate">
                             {getTransactionLabel(transaction.type)}
                           </p>
-                          <p className="text-sm text-gray-400">
-                            {transaction.description || formatDate(transaction.created_at)}
+                          <p className="text-xs text-gray-500 truncate">
+                            {new Date(transaction.created_at).toLocaleDateString('es-ES', {
+                              day: '2-digit',
+                              month: 'short',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
                           </p>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className={`text-lg font-bold ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
+
+                      {/* Monto */}
+                      <div className="text-right flex-shrink-0">
+                        <p className={`text-sm font-bold ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
                           {isPositive ? '+' : '-'}${Math.abs(parseFloat(transaction.amount) || 0).toFixed(2)}
                         </p>
-                        <p className="text-xs text-gray-400">
-                          {formatDate(transaction.created_at)}
-                        </p>
+                      </div>
+
+                      {/* Estado */}
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <StatusIcon className={`${statusColor} w-4 h-4`} size={16} />
+                        <span className={`text-xs font-medium ${statusColor} hidden sm:inline`}>
+                          {getStatusLabel(transaction.status)}
+                        </span>
                       </div>
                     </div>
-
-                    {/* Additional info */}
-                    {(transaction.balance_before !== null || transaction.balance_after !== null) && (
-                      <div className="mt-3 pt-3 border-t border-gray-700 flex items-center gap-4 text-xs text-gray-400">
-                        <span>
-                          Balance anterior: <strong>${parseFloat(transaction.balance_before || 0).toFixed(2)}</strong>
-                        </span>
-                        <span>
-                          Balance actual: <strong>${parseFloat(transaction.balance_after || 0).toFixed(2)}</strong>
-                        </span>
-                      </div>
-                    )}
                   </div>
                 )
               })}

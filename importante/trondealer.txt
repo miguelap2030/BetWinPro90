@@ -1,0 +1,16 @@
+esto es un ejemplo de una solicitud para crear una wallet para un usuario donde en el label puede pasarse el nombre de usuario del usuario 
+
+curl -X 'POST' \ 'https://trondealer.com/api/v2/wallets/assign' \ -H 'accept: application/json' \ -H 'x-api-key: td_ea7bf3e85b2b6f1be683787aa6bcb654a91d4f24e5dbf6f98f06aa7595d71f81' \ -H 'Content-Type: application/json' \ -d '{ "label": "us" }'
+
+
+y esta es la respuesta de trondealer
+
+{ "success": true, "wallet": { "id": "1806a8aa-d293-4c12-956a-7f29609f89d5", "address": "0xdD27Fe8E3fE9180283E2D0F1a51d1da599CFC1E3", "label": "us", "status": "active", "created_at": "2026-03-20T20:06:56.620459+00:00" } }
+
+
+esta es un webhook q me envio por un deposito de un usuario 
+
+{"event":"transaction.confirmed","timestamp":"2026-03-20T19:20:23.558Z","data":{"tx_hash":"0x1172f1a502b313524ac720097f2079674227bdc1337e2b5c6e9b33e9d415f478","block_number":87745902,"from_address":"0xf476b1f997f4a82C2dc60Ce1694fD24E8CAfC63D","to_address":"0x922A22d6546DBAf296e2ba252De144A5932b9aB9","asset":"USDT","amount":"0.01","confirmations":87746079,"wallet_label":"userprueba","network":"bsc"}}
+
+
+aqui la apikey de trondealer:td_ea7bf3e85b2b6f1be683787aa6bcb654a91d4f24e5dbf6f98f06aa7595d71f81

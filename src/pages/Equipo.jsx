@@ -406,9 +406,9 @@ export default function Equipo() {
             /* Contenedor con scroll vertical */
             <div className="max-h-64 overflow-y-auto space-y-2 pr-2 scrollbar-thin scrollbar-thumb-purple-500 scrollbar-track-gray-800">
               {filteredReferrals.map((referral, index) => {
-                const userData = referral.profiles || referral
-                const balanceInvertido = userData.balance_invertido ?? referral.balance_invertido ?? 0
-                const isActive = userData.is_active !== false
+                // La función RPC devuelve los campos directamente (no anidados en profiles)
+                const balanceInvertido = referral.balance_invertido ?? 0
+                const isActive = referral.is_active !== false
 
                 return (
                   <div
@@ -422,8 +422,8 @@ export default function Equipo() {
 
                     {/* Email - ocupando el espacio principal */}
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-gray-200 truncate" title={userData.email}>
-                        {userData.email || '---'}
+                      <p className="text-xs font-medium text-gray-200 truncate" title={referral.email}>
+                        {referral.email || '---'}
                       </p>
                     </div>
 
