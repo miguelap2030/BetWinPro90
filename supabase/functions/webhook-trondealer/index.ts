@@ -31,11 +31,31 @@ serve(async (req) => {
 
     // Handle transaction.confirmed event
     if (event === 'transaction.confirmed') {
-      const { tx_hash, block_number, from_address, to_address, asset, amount, confirmations, wallet_label, network } = data
+      const { 
+        tx_hash, 
+        block_number, 
+        from_address, 
+        to_address, 
+        asset, 
+        amount, 
+        confirmations, 
+        wallet_label, 
+        network 
+      } = data
 
-      // Initialize Supabase client
+      // Validate required fields
+      if (!tx_hash || !wallet_label || !amount) {
+        throw new Error('Missing required fields in webhook payload')
+      }
+
+      // Initialize Supabase client with service role
       const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
       const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      
+      if (!supabaseUrl || !supabaseServiceRoleKey) {
+        throw new Error('Supabase credentials not configured')
+      }
+
       const supabase = createClient(supabaseUrl, supabaseServiceRoleKey)
 
       // Find user by trondealer_label (username)
@@ -46,21 +66,12 @@ serve(async (req) => {
         .single()
 
       if (profileError || !profile) {
+        console.error('User not found for wallet label:', wallet_label, profileError)
         throw new Error(`User not found for wallet label: ${wallet_label}`)
       }
 
       const user_id = profile.id
-
-      // Get user's wallet
-      const { data: wallet, error: walletError } = await supabase
-        .from('wallets')
-        .select('id, disponible')
-        .eq('user_id', user_id)
-        .single()
-
-      if (walletError || !wallet) {
-        throw new Error('User wallet not found')
-      }
+      console.log('User found:', profile.username, user_id)
 
       // Parse amount (handle decimal values)
       const depositAmount = parseFloat(amount)
@@ -69,8 +80,8 @@ serve(async (req) => {
         throw new Error('Invalid deposit amount')
       }
 
-      // Start a transaction
-      const { error: txError } = await supabase.rpc('process_trondealer_deposit', {
+      // Call RPC function to process deposit
+      const { data: result, error: rpcError } = await supabase.rpc('process_trondealer_deposit', {
         p_user_id: user_id,
         p_tx_hash: tx_hash,
         p_from_address: from_address,
@@ -83,11 +94,28 @@ serve(async (req) => {
         p_wallet_label: wallet_label,
       })
 
-      if (txError) {
-        throw new Error(`Failed to process deposit: ${txError.message}`)
+      if (rpcError) {
+        console.error('RPC error:', rpcError)
+        throw new Error(`Failed to process deposit: ${rpcError.message}`)
       }
 
-      console.log(`Deposit processed successfully for user ${profile.username}: ${amount} ${asset}`)
+      // Check if deposit was already processed
+      if (result && !result.success) {
+        console.warn('Deposit already processed:', result.error)
+        return new Response(
+          JSON.stringify({
+            success: true,
+            message: 'Deposit already processed',
+            data: { tx_hash, user_id },
+          }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200,
+          },
+        )
+      }
+
+      console.log(`✅ Deposit processed successfully for user ${profile.username}: ${amount} ${asset}`)
 
       return new Response(
         JSON.stringify({
@@ -99,6 +127,7 @@ serve(async (req) => {
             amount: depositAmount,
             asset,
             tx_hash,
+            result,
           },
         }),
         {
@@ -109,6 +138,7 @@ serve(async (req) => {
     }
 
     // Handle other events if needed
+    console.log(`Event ${event} received but not processed`)
     return new Response(
       JSON.stringify({
         success: true,
@@ -120,7 +150,7 @@ serve(async (req) => {
       },
     )
   } catch (error) {
-    console.error('Error processing webhook:', error)
+    console.error('❌ Error processing webhook:', error)
     return new Response(
       JSON.stringify({
         success: false,
