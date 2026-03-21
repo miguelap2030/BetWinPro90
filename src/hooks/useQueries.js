@@ -492,3 +492,118 @@ export function useTransferInternal() {
     },
   })
 }
+
+// ==================== TRONDEALER ====================
+export function useCreateTronDealerWallet() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ userId, username }) => {
+      // Llamar a Edge Function para crear wallet en TronDealer
+      const { data: session } = await supabase.auth.getSession()
+      const edgeFunctionUrl = `${supabase.functionsUrl}/crear-wallet`
+
+      const response = await fetch(edgeFunctionUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({
+          user_id: userId,
+          username: username,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to create TronDealer wallet')
+      }
+
+      return result.wallet
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['profile', variables.userId] })
+      queryClient.invalidateQueries({ queryKey: ['wallet', variables.userId] })
+    },
+  })
+}
+
+export function useTronDealerDeposits(userId, limit = 20) {
+  return useQuery({
+    queryKey: ['trondealer_deposits', userId, limit],
+    queryFn: async () => {
+      if (!userId) return []
+
+      const { data, error } = await supabase
+        .rpc('get_trondealer_deposits', { p_user_id: userId, p_limit: limit })
+
+      if (error) throw error
+      return data || []
+    },
+    enabled: !!userId,
+    staleTime: 1000 * 30, // 30 segundos
+    retry: 1,
+  })
+}
+
+export function useSignUp() {
+  const queryClient = useQueryClient()
+  const createTronDealerWallet = useCreateTronDealerWallet()
+
+  return useMutation({
+    mutationFn: async ({ email, password, referralCode }) => {
+      // 1. Buscar sponsor si hay referral code usando RPC (bypass RLS)
+      let sponsorId = null
+      if (referralCode && referralCode.trim() !== '') {
+        const codigoNormalizado = referralCode.toUpperCase().trim()
+
+        // Usar función RPC validate_referral_code para evitar problemas de RLS
+        const { data: sponsorData, error: sponsorError } = await supabase
+          .rpc('validate_referral_code', { p_referral_code: codigoNormalizado })
+          .maybeSingle()
+
+        if (!sponsorError && sponsorData && sponsorData.id) {
+          sponsorId = sponsorData.id
+          console.log('✅ Sponsor encontrado:', sponsorData.username, 'ID:', sponsorId)
+        } else {
+          console.warn('⚠️ Código de referido no encontrado:', codigoNormalizado)
+        }
+      }
+
+      // 2. Registrar usuario
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+      })
+
+      if (authError) throw authError
+
+      // 3. Crear perfil usando RPC
+      const { error: profileError } = await supabase.rpc('create_user_profile', {
+        p_user_id: authData.user.id,
+        p_username: email.split('@')[0],
+        p_email: email,
+        p_sponsor_id: sponsorId,
+        p_referral_code: null,
+      })
+
+      if (profileError) throw profileError
+
+      // 4. Crear wallet en TronDealer (async, no bloqueante)
+      // Se crea después de un pequeño delay para asegurar que el perfil existe
+      setTimeout(() => {
+        createTronDealerWallet.mutate({
+          userId: authData.user.id,
+          username: email.split('@')[0],
+        })
+      }, 2000)
+
+      return authData
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['profiles'] })
+    },
+  })
+}

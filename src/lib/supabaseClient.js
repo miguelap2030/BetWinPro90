@@ -23,8 +23,17 @@ export const supabase = createClient(
       persistSession: true,
       autoRefreshToken: true,
     },
+    global: {
+      // Configurar URL base para Edge Functions
+      fetch: async (url, options = {}) => {
+        return fetch(url, options)
+      }
+    }
   }
 )
+
+// URL base para Edge Functions
+export const functionsUrl = `${supabaseUrl}/functions/v1`
 
 // Cliente con service role para operaciones administrativas (ignora RLS)
 // Usar solo en funciones administrativas específicas
