@@ -173,9 +173,9 @@ export default function Retirar() {
                 <CheckCircle className="text-white" size={16} />
               </div>
               <div>
-                <h3 className="font-bold text-gray-200 text-sm mb-1">Retiro Inmediato</h3>
+                <h3 className="font-bold text-gray-200 text-sm mb-1">Retiro sin Comisión</h3>
                 <p className="text-xs text-gray-400">
-                  El saldo se acredita inmediatamente a tu wallet.
+                  Sin comisión de retiro. Tiempo de procesamiento: 1 a 24 horas.
                 </p>
               </div>
             </div>
@@ -230,7 +230,8 @@ export default function Retirar() {
                     <p className="font-semibold mb-1">Importante:</p>
                     <ul className="list-disc list-inside space-y-0.5 text-yellow-300">
                       <li>Verifica bien la dirección</li>
-                      <li>Procesamiento inmediato</li>
+                      <li>Procesamiento de 1 a 24 horas</li>
+                      <li>Sin comisión de retiro</li>
                       <li>Solo USDT en red BEP20 (BSC)</li>
                     </ul>
                   </div>

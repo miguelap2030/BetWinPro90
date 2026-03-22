@@ -559,7 +559,7 @@ export default function Principal() {
               <StepCard
                 number={4}
                 title="Solicita y espera"
-                description="Envía tu solicitud. Nuestro equipo la procesará en 24-48 horas hábiles."
+                description="Envía tu solicitud. Nuestro equipo la procesará en 1-24 horas."
                 icon={Clock}
               />
             </div>
@@ -572,7 +572,7 @@ export default function Principal() {
                   <ul className="space-y-2 text-sm text-gray-400">
                     <li className="flex items-start gap-2">
                       <span className="text-yellow-400">•</span>
-                      <span>Tiempo de procesamiento: <strong className="text-gray-300">24-48 horas hábiles</strong></span>
+                      <span>Tiempo de procesamiento: <strong className="text-gray-300">1-24 horas</strong></span>
                     </li>
                     <li className="flex items-start gap-2">
                       <span className="text-yellow-400">•</span>
@@ -580,7 +580,7 @@ export default function Principal() {
                     </li>
                     <li className="flex items-start gap-2">
                       <span className="text-yellow-400">•</span>
-                      <span>Comisión de red: <strong className="text-gray-300">$1 USD (fija)</strong></span>
+                      <span>Comisión de retiro: <strong className="text-gray-300">$0 (sin comisión)</strong></span>
                     </li>
                     <li className="flex items-start gap-2">
                       <span className="text-yellow-400">•</span>
@@ -749,7 +749,7 @@ export default function Principal() {
               />
               <FAQItem
                 question="¿Cuándo puedo retirar mis ganancias?"
-                answer="Puedes solicitar retiros en cualquier momento. Las ganancias diarias del 3% se acreditan automáticamente cada 24 horas. Los retiros se procesan en 24-48 horas hábiles."
+                answer="Puedes solicitar retiros en cualquier momento. Las ganancias diarias del 3% se acreditan automáticamente cada 24 horas. Los retiros se procesan en 1-24 horas sin comisión."
               />
               <FAQItem
                 question="¿Cómo funciona el sistema MLM?"
