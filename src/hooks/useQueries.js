@@ -512,12 +512,19 @@ export function useTronDealerWallet(userId) {
         .eq('id', userId)
         .single()
 
-      if (error) throw error
+      // Si no hay datos o hay error, retornar null (no es error crítico)
+      if (error || !data) {
+        // Solo logueamos, no lanzamos error para no romper el hook
+        console.debug('useTronDealerWallet: Sin datos para usuario', userId, error?.message)
+        return null
+      }
       return data
     },
     enabled: !!userId,
     staleTime: 1000 * 60 * 5, // 5 minutos
     retry: 1,
+    // No lanzar error si no hay datos
+    throwOnError: false,
   })
 }
 
@@ -527,33 +534,65 @@ export function useCreateTronDealerWalletDirect() {
 
   return useMutation({
     mutationFn: async ({ userId, username }) => {
-      const { data: session } = await supabase.auth.getSession()
-      const edgeFunctionUrl = `${supabase.functionsUrl}/crear-wallet`
+      try {
+        const { data: session } = await supabase.auth.getSession()
+        const edgeFunctionUrl = `${supabase.functionsUrl}/crear-wallet`
 
-      const response = await fetch(edgeFunctionUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session?.access_token}`,
-        },
-        body: JSON.stringify({
-          user_id: userId,
-          username: username,
-        }),
-      })
+        console.log('📡 Llamando a Edge Function:', edgeFunctionUrl)
+        console.log('👤 User ID:', userId, 'Username:', username)
+        console.log('🔑 Session:', session ? 'Hay sesión' : 'NO hay sesión')
 
-      const result = await response.json()
+        if (!session?.access_token) {
+          throw new Error('No hay sesión de usuario autenticado')
+        }
 
-      if (!response.ok || !result.success) {
-        throw new Error(result.error || 'Failed to create TronDealer wallet')
+        const response = await fetch(edgeFunctionUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            user_id: userId,
+            username: username,
+          }),
+        })
+
+        console.log('📥 Respuesta HTTP:', response.status, response.statusText)
+
+        const result = await response.json()
+        console.log('📦 Result:', result)
+
+        if (!response.ok || !result.success) {
+          console.error('❌ Error en Edge Function:', result.error)
+          throw new Error(result.error || 'Failed to create TronDealer wallet')
+        }
+
+        console.log('✅ Wallet creada:', result.wallet)
+        return result.wallet
+      } catch (error) {
+        console.error('❌ Error en mutation:', error)
+        console.error('❌ Error details:', {
+          message: error.message,
+          stack: error.stack,
+          name: error.name,
+        })
+        throw error
       }
-
-      return result.wallet
     },
     onSuccess: (_, variables) => {
+      console.log('🔄 Invalidando caché para usuario:', variables.userId)
       queryClient.invalidateQueries({ queryKey: ['profile', variables.userId] })
       queryClient.invalidateQueries({ queryKey: ['wallet', variables.userId] })
       queryClient.invalidateQueries({ queryKey: ['trondealer_wallet', variables.userId] })
+    },
+    onError: (error) => {
+      console.error('❌ Error en useCreateTronDealerWalletDirect:', error)
+      console.error('❌ Error details:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name,
+      })
     },
   })
 }

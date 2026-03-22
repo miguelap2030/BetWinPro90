@@ -2,40 +2,21 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import Sidebar from '../components/Sidebar'
-import { ArrowDownToLine, DollarSign, Wallet, CheckCircle, AlertCircle, Copy, QrCode, Loader2 } from 'lucide-react'
-import { useProfile, useSignOut, useTronDealerWallet, useCreateTronDealerWalletDirect } from '../hooks/useQueries'
-import { useQueryClient } from '@tanstack/react-query'
-import QRCode from '../components/QRCode'
+import { DollarSign, Wallet, Copy, QrCode, AlertCircle, CheckCircle, ArrowDownToLine, Shield, Clock, Zap } from 'lucide-react'
 
 export default function Depositar() {
   const navigate = useNavigate()
-  const queryClient = useQueryClient()
   const [user, setUser] = useState(null)
   const [profile, setProfile] = useState(null)
   const [wallet, setWallet] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [amount, setAmount] = useState('')
-  const [processing, setProcessing] = useState(false)
-  const [showQR, setShowQR] = useState(false)
   const [copySuccess, setCopySuccess] = useState(false)
-
-  const { data: profileData } = useProfile(user?.id)
-  const { data: trondealerWallet, isLoading: walletLoading, refetch: refetchWallet } = useTronDealerWallet(user?.id)
-  const createWalletMutation = useCreateTronDealerWalletDirect()
-  const signOutMutation = useSignOut()
+  const [generatingWallet, setGeneratingWallet] = useState(false)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
     checkUser()
   }, [])
-
-  useEffect(() => {
-    if (profileData) setProfile(profileData)
-  }, [profileData])
-
-  const handleSignOut = async () => {
-    await signOutMutation.mutateAsync()
-    navigate('/signin')
-  }
 
   const checkUser = async () => {
     try {
@@ -60,89 +41,59 @@ export default function Depositar() {
         .single()
       setWallet(walletData)
     } catch (error) {
-      console.error('Error:', error)
+      setError('Error al cargar datos: ' + error.message)
     } finally {
       setLoading(false)
     }
   }
 
   const handleGenerateWallet = async () => {
-    if (!user || !profile) return
+    if (!user || !profile) {
+      setError('No hay usuario o perfil disponible')
+      return
+    }
+
+    setGeneratingWallet(true)
+    setError(null)
 
     try {
-      await createWalletMutation.mutateAsync({
-        userId: user.id,
-        username: profile.username || user.email.split('@')[0],
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/crear-wallet`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({
+          user_id: user.id,
+          username: profile.username || user.email.split('@')[0],
+        }),
       })
-      
-      // Esperar un momento y recargar
-      setTimeout(() => {
-        refetchWallet()
-      }, 2000)
+
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Error al crear wallet')
+      }
+
+      await checkUser()
+      setError(null)
     } catch (error) {
-      console.error('Error al crear wallet:', error)
-      alert('Error al crear wallet: ' + error.message)
+      setError(error.message)
+    } finally {
+      setGeneratingWallet(false)
     }
   }
 
   const handleCopyAddress = async () => {
-    if (!trondealerWallet?.trondealer_address) return
+    const address = wallet?.trondealer_address || profile?.trondealer_address
+    if (!address) return
 
     try {
-      await navigator.clipboard.writeText(trondealerWallet.trondealer_address)
+      await navigator.clipboard.writeText(address)
       setCopySuccess(true)
       setTimeout(() => setCopySuccess(false), 2000)
     } catch (error) {
       console.error('Error al copiar:', error)
-    }
-  }
-
-  const handleDeposit = async (e) => {
-    e.preventDefault()
-
-    if (!amount || parseFloat(amount) <= 0) {
-      alert('Ingresa un monto válido')
-      return
-    }
-
-    setProcessing(true)
-
-    try {
-      // 1. Crear transacción de depósito directamente
-      const { error: transactionError } = await supabase.rpc('create_transaction', {
-        p_user_id: user.id,
-        p_type: 'deposit',
-        p_amount: parseFloat(amount),
-        p_description: `Depósito de $${parseFloat(amount).toFixed(2)}`,
-        p_status: 'completed',
-        p_reference: 'deposito_simulado'
-      })
-
-      if (transactionError) throw transactionError
-
-      // 2. Actualizar wallet - sumar al saldo invertido (para pruebas)
-      const { error: walletError } = await supabase
-        .from('wallets')
-        .update({
-          balance_invertido: (wallet?.balance_invertido || 0) + parseFloat(amount),
-          updated_at: new Date().toISOString()
-        })
-        .eq('user_id', user.id)
-
-      if (walletError) throw walletError
-
-      // 3. Invalidar caché para actualizar UI
-      queryClient.invalidateQueries({ queryKey: ['wallet', user.id] })
-      queryClient.invalidateQueries({ queryKey: ['transactions', user.id] })
-      queryClient.invalidateQueries({ queryKey: ['dashboard', user.id] })
-
-      alert(`✅ Depósito de $${parseFloat(amount).toFixed(2)} completado exitosamente`)
-      navigate('/dashboard/panel')
-    } catch (error) {
-      console.error('Error:', error)
-      alert('Error al procesar depósito: ' + error.message)
-    } finally {
-      setProcessing(false)
     }
   }
 
@@ -157,206 +108,269 @@ export default function Depositar() {
     )
   }
 
-  const walletAddress = trondealerWallet?.trondealer_address || profile?.trondealer_address
-  const walletLabel = trondealerWallet?.trondealer_label || profile?.trondealer_label
+  const walletAddress = wallet?.trondealer_address || profile?.trondealer_address
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-950 to-gray-900">
-      <Sidebar user={user} profile={profile} onSignOut={handleSignOut} />
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-950 to-gray-900 pb-24">
+      <Sidebar user={user} profile={profile} onSignOut={() => navigate('/signin')} />
 
-      <main className="lg:ml-0 p-3 pt-20 pb-24">
-        <div className="max-w-lg mx-auto">
+      <main className="lg:ml-0 p-3 pt-20">
+        <div className="max-w-2xl mx-auto">
           {/* Header */}
-          <div className="mb-4 text-center">
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-green-600 to-blue-600 bg-clip-text text-transparent mb-1">
-              Depositar Fondos
+          <div className="text-center mb-6">
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-green-400 to-blue-500 bg-clip-text text-transparent mb-2">
+              Depositar USDT
             </h1>
-            <p className="text-xs text-gray-400">USDT en red BSC (BEP20)</p>
+            <p className="text-sm text-gray-400">Red BSC (BEP20)</p>
           </div>
 
           {/* Balance Card */}
-          <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl p-4 mb-4 shadow-lg text-white">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs opacity-90">Saldo Invertido</p>
-              <DollarSign size={16} className="opacity-75" />
+          <div className="bg-gradient-to-br from-purple-600 to-purple-800 rounded-2xl p-5 mb-6 shadow-xl text-white">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-white/20 rounded-lg">
+                  <DollarSign size={20} />
+                </div>
+                <div>
+                  <p className="text-xs opacity-80">Saldo Disponible</p>
+                  <p className="text-2xl font-bold">${wallet?.balance_disponible?.toFixed(2) || '0.00'}</p>
+                </div>
+              </div>
             </div>
-            <p className="text-3xl font-bold">${wallet?.balance_invertido?.toFixed(2) || '0.00'}</p>
           </div>
 
-          {/* Wallet USDT Section */}
-          <div className="bg-gray-800 rounded-xl p-4 mb-4 shadow-sm border border-gray-700">
-            <div className="flex items-center gap-2 mb-3">
-              <Wallet className="text-green-500" size={20} />
-              <h2 className="font-bold text-gray-200">Tu Wallet USDT (BEP20)</h2>
-            </div>
-
-            {walletLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="animate-spin text-purple-500" size={32} />
+          {/* Mensaje de Error */}
+          {error && (
+            <div className="mb-6 bg-red-900/30 border border-red-700 rounded-xl p-4">
+              <div className="flex items-center gap-3">
+                <AlertCircle className="text-red-400 flex-shrink-0" size={20} />
+                <p className="text-sm text-red-200 flex-1">{error}</p>
+                <button onClick={() => setError(null)} className="text-red-400 hover:text-red-300 text-xl">×</button>
               </div>
-            ) : walletAddress ? (
-              <>
-                {/* QR Code */}
-                <div className="flex justify-center mb-4">
-                  <QRCode value={walletAddress} size={180} />
-                </div>
+            </div>
+          )}
 
-                {/* Wallet Address */}
-                <div className="bg-gray-900 rounded-lg p-3 mb-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <code className="text-xs text-green-400 break-all font-mono">
-                      {walletAddress}
-                    </code>
-                    <button
-                      onClick={handleCopyAddress}
-                      className="p-2 hover:bg-gray-800 rounded-lg transition-colors flex-shrink-0"
-                      title="Copiar dirección"
-                    >
-                      {copySuccess ? (
-                        <CheckCircle size={18} className="text-green-500" />
-                      ) : (
-                        <Copy size={18} className="text-gray-400" />
-                      )}
-                    </button>
+          {/* Sección Principal */}
+          {!walletAddress ? (
+            /* Generar Wallet */
+            <div className="bg-gray-800 rounded-2xl p-8 shadow-lg border border-gray-700 text-center">
+              <div className="w-20 h-20 bg-yellow-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertCircle className="text-yellow-500" size={40} />
+              </div>
+              <h2 className="text-xl font-bold text-gray-200 mb-2">
+                No tienes wallet USDT
+              </h2>
+              <p className="text-gray-400 text-sm mb-6">
+                Genera tu dirección única para recibir depósitos en USDT (BEP20)
+              </p>
+              <button
+                onClick={handleGenerateWallet}
+                disabled={generatingWallet}
+                className="w-full py-4 bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-white rounded-xl font-bold text-lg shadow-lg disabled:opacity-50 transition-all"
+              >
+                {generatingWallet ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full" />
+                    Generando...
+                  </span>
+                ) : (
+                  'Generar Wallet USDT'
+                )}
+              </button>
+              <p className="text-xs text-gray-500 mt-4">
+                ⏱️ Se genera en segundos • Dirección única y permanente
+              </p>
+            </div>
+          ) : (
+            /* Wallet Existente */
+            <div className="space-y-6">
+              {/* QR Code - Siempre Visible */}
+              <div className="bg-white rounded-2xl p-6 shadow-xl">
+                <div className="text-center mb-4">
+                  <div className="inline-flex items-center gap-2 bg-green-100 text-green-800 px-4 py-2 rounded-full text-sm font-semibold">
+                    <CheckCircle size={16} />
+                    Wallet Activa
                   </div>
                 </div>
+                
+                <div className="flex justify-center mb-4">
+                  <div className="bg-white p-4 rounded-xl shadow-inner">
+                    <img 
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${walletAddress}`} 
+                      alt="QR Wallet"
+                      className="w-48 h-48"
+                    />
+                  </div>
+                </div>
+                
+                <p className="text-center text-xs text-gray-600">
+                  Escanea el QR o copia la dirección
+                </p>
+              </div>
 
-                {/* Copy Button */}
+              {/* Dirección de Wallet */}
+              <div className="bg-gray-800 rounded-2xl p-6 shadow-lg border border-gray-700">
+                <div className="flex items-center gap-2 mb-4">
+                  <Wallet className="text-green-500" size={24} />
+                  <h3 className="font-bold text-gray-200">Tu Dirección USDT (BEP20)</h3>
+                </div>
+
+                <div className="bg-gray-900 rounded-xl p-4 mb-4 border border-gray-700">
+                  <code className="text-sm text-green-400 break-all font-mono">
+                    {walletAddress}
+                  </code>
+                </div>
+
                 <button
                   onClick={handleCopyAddress}
-                  className="w-full py-2 px-4 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 text-sm"
+                  className={`w-full py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${
+                    copySuccess 
+                      ? 'bg-green-600 text-white' 
+                      : 'bg-gray-700 hover:bg-gray-600 text-gray-200'
+                  }`}
                 >
-                  <Copy size={16} />
-                  {copySuccess ? '¡Copiado!' : 'Copiar dirección'}
+                  {copySuccess ? (
+                    <>
+                      <CheckCircle size={20} />
+                      ¡Copiado!
+                    </>
+                  ) : (
+                    <>
+                      <Copy size={20} />
+                      Copiar Dirección
+                    </>
+                  )}
                 </button>
+              </div>
 
-                {/* Info */}
-                <div className="mt-4 bg-blue-900/30 rounded-lg p-3 border border-blue-700">
-                  <div className="flex items-start gap-2">
-                    <AlertCircle className="text-blue-400 flex-shrink-0 mt-0.5" size={16} />
-                    <div className="text-xs text-blue-200">
-                      <p className="font-semibold mb-1">Instrucciones:</p>
-                      <ol className="list-decimal list-inside space-y-1 text-blue-300">
-                        <li>Copia tu dirección de wallet</li>
-                        <li>Envía USDT desde otra wallet (red BSC/BEP20)</li>
-                        <li>El saldo se acreditará automáticamente</li>
-                        <li>Mínimo: $0.50 USDT</li>
-                      </ol>
+              {/* Información de Depósito */}
+              <div className="bg-gradient-to-br from-blue-900/40 to-purple-900/40 rounded-2xl p-6 border border-blue-700/50">
+                <div className="flex items-center gap-3 mb-4">
+                  <ArrowDownToLine className="text-blue-400" size={24} />
+                  <h3 className="font-bold text-lg text-gray-200">Cómo Depositar</h3>
+                </div>
+
+                <div className="space-y-4">
+                  {/* Paso 1 */}
+                  <div className="flex gap-3">
+                    <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-white">
+                      1
+                    </div>
+                    <div>
+                      <p className="text-gray-200 font-semibold text-sm">Copia tu dirección</p>
+                      <p className="text-gray-400 text-xs">Usa el botón de arriba o escanea el QR</p>
+                    </div>
+                  </div>
+
+                  {/* Paso 2 */}
+                  <div className="flex gap-3">
+                    <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-white">
+                      2
+                    </div>
+                    <div>
+                      <p className="text-gray-200 font-semibold text-sm">Envía USDT desde otra wallet</p>
+                      <p className="text-gray-400 text-xs">Binance, Trust Wallet, MetaMask, etc.</p>
+                    </div>
+                  </div>
+
+                  {/* Paso 3 */}
+                  <div className="flex gap-3">
+                    <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-white">
+                      3
+                    </div>
+                    <div>
+                      <p className="text-gray-200 font-semibold text-sm">Recibe automáticamente</p>
+                      <p className="text-gray-400 text-xs">Tu saldo se acredita al confirmarse</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Especificaciones y Recomendaciones */}
+              <div className="bg-gray-800 rounded-2xl p-6 shadow-lg border border-gray-700">
+                <div className="flex items-center gap-2 mb-4">
+                  <Shield className="text-purple-500" size={24} />
+                  <h3 className="font-bold text-gray-200">Especificaciones</h3>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-start gap-3">
+                    <CheckCircle className="text-green-500 flex-shrink-0 mt-0.5" size={16} />
+                    <div>
+                      <p className="text-gray-200 text-sm font-semibold">Red BSC (BEP20)</p>
+                      <p className="text-gray-400 text-xs">Solo USDT en red Binance Smart Chain</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <CheckCircle className="text-green-500 flex-shrink-0 mt-0.5" size={16} />
+                    <div>
+                      <p className="text-gray-200 text-sm font-semibold">Mínimo $0.50 USDT</p>
+                      <p className="text-gray-400 text-xs">Cualquier cantidad superior a 0.5 USDT</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <CheckCircle className="text-green-500 flex-shrink-0 mt-0.5" size={16} />
+                    <div>
+                      <p className="text-gray-200 text-sm font-semibold">Acreditación Automática</p>
+                      <p className="text-gray-400 text-xs">Sin intervención manual requerida</p>
                     </div>
                   </div>
                 </div>
 
-                {/* Toggle QR */}
-                <button
-                  onClick={() => setShowQR(!showQR)}
-                  className="w-full mt-3 py-2 px-4 bg-purple-900/50 hover:bg-purple-900 text-purple-300 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 text-sm"
-                >
-                  <QrCode size={16} />
-                  {showQR ? 'Ocultar QR' : 'Mostrar QR'}
-                </button>
-              </>
-            ) : (
-              <div className="text-center py-6">
-                <AlertCircle className="mx-auto text-yellow-500 mb-3" size={32} />
-                <p className="text-gray-300 text-sm mb-4">
-                  No tienes una wallet USDT generada aún.
-                </p>
-                <button
-                  onClick={handleGenerateWallet}
-                  disabled={createWalletMutation.isPending}
-                  className="px-6 py-3 bg-gradient-to-r from-green-500 to-blue-500 text-white rounded-xl font-semibold hover:shadow-lg disabled:opacity-50 transition-all"
-                >
-                  {createWalletMutation.isPending ? 'Generando...' : 'Generar Wallet USDT'}
-                </button>
-                <p className="text-xs text-gray-500 mt-2">
-                  Se generará una dirección única para ti
-                </p>
-              </div>
-            )}
-          </div>
+                {/* Recomendaciones */}
+                <div className="mt-6 pt-6 border-t border-gray-700">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Zap className="text-yellow-500" size={20} />
+                    <h4 className="font-bold text-gray-200 text-sm">Recomendaciones</h4>
+                  </div>
 
-          {/* Depósito Simulado Section */}
-          <div className="bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-700">
-            <div className="flex items-center gap-2 mb-4">
-              <ArrowDownToLine className="text-blue-500" size={20} />
-              <h2 className="font-bold text-gray-200">Depósito Simulado (PRUEBAS)</h2>
+                  <div className="space-y-2">
+                    <div className="flex items-start gap-2">
+                      <span className="text-yellow-500 text-sm">•</span>
+                      <p className="text-gray-400 text-xs">
+                        Verifica que estás enviando USDT en red <strong className="text-gray-300">BSC/BEP20</strong>
+                      </p>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="text-yellow-500 text-sm">•</span>
+                      <p className="text-gray-400 text-xs">
+                        Guarda tu dirección para futuros depósitos
+                      </p>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="text-yellow-500 text-sm">•</span>
+                      <p className="text-gray-400 text-xs">
+                        Las transacciones toman ~3-5 minutos en confirmarse
+                      </p>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="text-yellow-500 text-sm">•</span>
+                      <p className="text-gray-400 text-xs">
+                        No envíes desde exchanges que no soporten retiros a direcciones externas
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tiempo de Procesamiento */}
+              <div className="bg-gradient-to-r from-green-900/30 to-emerald-900/30 rounded-xl p-4 border border-green-700/50">
+                <div className="flex items-center gap-3">
+                  <Clock className="text-green-400 flex-shrink-0" size={24} />
+                  <div>
+                    <p className="text-green-200 font-semibold text-sm">
+                      Procesamiento Automático
+                    </p>
+                    <p className="text-green-400/80 text-xs">
+                      Tu depósito se acreditará automáticamente al confirmarse en la blockchain
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
-
-            <form onSubmit={handleDeposit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-300 mb-2">
-                  Monto a Depositar (USD)
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">$</span>
-                  <input
-                    type="number"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    placeholder="0.00"
-                    className="w-full pl-8 pr-3 py-3 border-2 border-gray-700 rounded-xl focus:border-green-500 focus:ring-2 focus:ring-green-200 text-lg font-bold"
-                    step="0.01"
-                    min="0.5"
-                    required
-                  />
-                </div>
-                <p className="text-xs text-gray-400 mt-1">Mínimo: $0.50</p>
-              </div>
-
-              {/* Quick Amounts */}
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setAmount('50')}
-                  className="py-2 px-3 bg-purple-900/30 hover:bg-purple-900/50 border border-purple-700 rounded-lg text-sm font-semibold text-purple-300 transition-colors"
-                >
-                  $50
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAmount('100')}
-                  className="py-2 px-3 bg-purple-900/30 hover:bg-purple-900/50 border border-purple-700 rounded-lg text-sm font-semibold text-purple-300 transition-colors"
-                >
-                  $100
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAmount('500')}
-                  className="py-2 px-3 bg-purple-900/30 hover:bg-purple-900/50 border border-purple-700 rounded-lg text-sm font-semibold text-purple-300 transition-colors"
-                >
-                  $500
-                </button>
-              </div>
-
-              {/* Success Info */}
-              <div className="bg-green-900/30 rounded-xl p-3 border border-green-700">
-                <div className="flex items-center gap-2">
-                  <CheckCircle className="text-green-400 flex-shrink-0" size={16} />
-                  <p className="text-xs text-green-800 font-medium">
-                    Se acreditará inmediatamente
-                  </p>
-                </div>
-              </div>
-
-              {/* Buttons */}
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => navigate('/dashboard/panel')}
-                  className="flex-1 px-4 py-3 border-2 border-gray-600 text-gray-300 rounded-xl font-semibold hover:bg-gray-800/50 transition-colors text-sm"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={processing}
-                  className="flex-1 px-4 py-3 bg-gradient-to-r from-green-500 to-blue-500 text-white rounded-xl font-semibold hover:shadow-lg disabled:opacity-50 transition-all text-sm"
-                >
-                  {processing ? 'Procesando...' : 'Confirmar'}
-                </button>
-              </div>
-            </form>
-          </div>
+          )}
         </div>
       </main>
     </div>
